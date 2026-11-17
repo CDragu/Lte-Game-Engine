@@ -178,6 +178,7 @@ int engineMain(unsigned int argc,void* argv)
     weather.configure(tuning.get(tower::Tuning::WIND_STRENGTH),
                       tuning.get(tower::Tuning::WIND_GUSTINESS),
                       tuning.get(tower::Tuning::WIND_CYCLE));
+    weather.configureDrops(tuning.getInt(tower::Tuning::WIND_DROPS));
     weather.reset();
     bool tuningHeldLastFrame=false;
     const wchar_t* tuningStatus=loadedTuning ? L"TUNING LOADED" : L"TUNING DEFAULTS - FILE MISSING";
@@ -279,6 +280,7 @@ int engineMain(unsigned int argc,void* argv)
         weather.configure(tuning.get(tower::Tuning::WIND_STRENGTH),
                           tuning.get(tower::Tuning::WIND_GUSTINESS),
                           tuning.get(tower::Tuning::WIND_CYCLE));
+        weather.configureDrops(tuning.getInt(tower::Tuning::WIND_DROPS));
         if(flow.screen()==tower::MenuFlow::EXIT_REQUESTED) {
             // Let the selection cue complete before shutting down audio.
             exitDelay-=frameSeconds;
@@ -408,6 +410,11 @@ int engineMain(unsigned int argc,void* argv)
                                 nodes[index]=createBox(smgr,b,blockColors[3]);
                             if(nodes[index]) nodes[index]->setVisible(true);
                             stackProgress.beginDrop(index);
+                            // Count actual releases, not successful landings,
+                            // failed spawn attempts or elapsed seconds.
+                            // The new weather profile begins a smooth
+                            // transition immediately after this release.
+                            weather.onBlockDropped();
                             soundCues.beginDrop(index);
                             sounds.play(tower::SoundSynth::DROP);
                             dropped=true;

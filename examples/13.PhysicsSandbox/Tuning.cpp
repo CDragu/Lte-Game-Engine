@@ -28,7 +28,8 @@ Tuning::Tuning()
     add(SCORE_PER_BLOCK,"score_per_block",L"POINTS/BOX",100.0f,0.0f,1000.0f,10.0f,true);
     add(WIND_STRENGTH,"wind_strength",L"WIND FORCE",1.30f,0.0f,6.0f,0.10f,false);
     add(WIND_GUSTINESS,"wind_gustiness",L"GUSTS",0.40f,0.0f,1.0f,0.05f,false);
-    add(WIND_CYCLE,"wind_cycle",L"WIND CYCLE",14.0f,4.0f,40.0f,1.0f,false);
+    add(WIND_CYCLE,"wind_cycle",L"GUST PERIOD",14.0f,4.0f,40.0f,1.0f,false);
+    add(WIND_DROPS,"wind_drops",L"DROPS/WEATHER",1.0f,1.0f,30.0f,1.0f,true);
 }
 
 bool Tuning::set(Field field,float v)

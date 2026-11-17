@@ -16,7 +16,7 @@ int main() {
     const char* path="tuning_test_output.cfg";
     {
         Tuning t;
-        check(Tuning::FIELD_COUNT==12,"12 tweakable fields registered");
+        check(Tuning::FIELD_COUNT==13,"13 tweakable fields registered");
         check(closeTo(t.get(Tuning::GRAVITY),12.0f) &&
               closeTo(t.get(Tuning::SETTLING_TIME),0.35f) &&
               t.getInt(Tuning::SCORE_PER_BLOCK)==100,"expected startup defaults");
@@ -31,7 +31,8 @@ int main() {
         for(int i=0;i<100;i++) editor.down();
         check(editor.selected()==Tuning::FIELD_COUNT-1,"editor clamps last row");
         editor.change(t,1);
-        check(closeTo(t.get(Tuning::WIND_CYCLE),15.0f),"weather timing editable");
+        check(t.getInt(Tuning::WIND_DROPS)==2,"weather drop interval editable");
+        check(t.set(Tuning::WIND_CYCLE,15.0f),"gust period is editable");
         check(t.set(Tuning::SCORE_PER_BLOCK,110.0f) &&
               t.getInt(Tuning::SCORE_PER_BLOCK)==110,
               "integer scoring uses steps");
@@ -49,7 +50,8 @@ int main() {
               reloaded.getInt(Tuning::SCORE_PER_BLOCK)==110 &&
               closeTo(reloaded.get(Tuning::WIND_CYCLE),15.0f) &&
               closeTo(reloaded.get(Tuning::WIND_STRENGTH),2.2f) &&
-              closeTo(reloaded.get(Tuning::WIND_GUSTINESS),0.65f),
+              closeTo(reloaded.get(Tuning::WIND_GUSTINESS),0.65f) &&
+              reloaded.getInt(Tuning::WIND_DROPS)==2,
               "all edited values survived round trip");
         check(reloaded.set(Tuning::SETTLING_TIME,1.25f),
               "settling time can change live");
