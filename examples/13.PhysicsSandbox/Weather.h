@@ -21,7 +21,7 @@ public:
     float fraction() const; // normalized 0..1 strength for drawing
     Severity severity() const;
     int dropsPerChange() const { return dropsPerChange_; }
-    int dropsUntilChange() const { return dropsPerChange_-dropsSinceChange_; }
+    int dropsUntilChange() const { return dropsSinceChange_>=dropsPerChange_ ? 1 : dropsPerChange_-dropsSinceChange_; }
     int totalDrops() const { return totalDrops_; }
     int weatherIndex() const { return weatherIndex_; }
     static const wchar_t* severityLabel(Severity severity);
