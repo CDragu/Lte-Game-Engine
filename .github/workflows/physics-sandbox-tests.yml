@@ -1,0 +1,20 @@
+name: Physics sandbox native tests
+
+on:
+  push:
+    paths:
+      - 'examples/13.PhysicsSandbox/**'
+      - '.github/workflows/physics-sandbox-tests.yml'
+  pull_request:
+    paths:
+      - 'examples/13.PhysicsSandbox/**'
+      - '.github/workflows/physics-sandbox-tests.yml'
+  workflow_dispatch:
+
+jobs:
+  physics-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile and test standalone C++98 physics
+        run: make -C examples/13.PhysicsSandbox/tests test
