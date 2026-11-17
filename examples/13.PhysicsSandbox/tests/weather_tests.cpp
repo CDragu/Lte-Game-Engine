@@ -51,6 +51,10 @@ int main() {
         check(absolute(a.accelerationX()-first)>0.00001f &&
               absolute(a.changeRateX())>0.00001f,
               "wind changes smoothly as fixed time advances");
+        const float recordedRate=a.changeRateX();
+        a.configure(4.0f,0.4f,15.0f);
+        check(absolute(a.changeRateX()-recordedRate)<0.00001f,
+              "render-time configure calls preserve gust velocity");
         const float frozen=a.accelerationX();
         a.step(0.0f);
         check(absolute(a.accelerationX()-frozen)<0.00001f,
