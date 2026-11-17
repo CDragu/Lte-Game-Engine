@@ -143,7 +143,7 @@ IAnimatedMesh* C3DSMeshFileLoader::createMesh(io::IReadFile* file)
 #endif
 
 	if (data.header.id != 0x4D4D)
-		return false;
+		return 0;
 
 	CurrentMaterial.Material = video::SMaterial();
 	CurrentMaterial.Name = "";

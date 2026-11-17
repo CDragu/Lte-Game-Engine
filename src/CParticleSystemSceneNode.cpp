@@ -185,7 +185,10 @@ void CParticleSystemSceneNode::OnPreRender()
 
 		if (Particles.size() != 0)
 		{
-			SceneManager->registerNodeForRendering(this);
+			video::IVideoDriver* driver = SceneManager->getVideoDriver();
+			video::IMaterialRenderer* rnd = driver ? driver->getMaterialRenderer(Material.MaterialType) : 0;
+			SceneManager->registerNodeForRendering(this,
+				(rnd && rnd->isTransparent()) ? scene::ESNRP_TRANSPARENT : scene::ESNRP_SOLID);
 			ISceneNode::OnPreRender();
 		}
 	}
@@ -258,7 +261,9 @@ void CParticleSystemSceneNode::render()
 		driver->setTransform(video::ETS_WORLD, AbsoluteTransformation);
 
 
-	driver->setMaterial(Material);
+	video::SMaterial material = Material;
+	material.DisableFlush = true;
+	driver->setMaterial(material);
 
 	driver->drawIndexedTriangleList(Vertices.pointer(), Particles.size()*4,
 	                                Indices.pointer(), Particles.size()*2);
@@ -277,7 +282,7 @@ const core::aabbox3d<f32>& CParticleSystemSceneNode::getBoundingBox() const
 
 void CParticleSystemSceneNode::doParticleSystem(u32 time)
 {
-	u32 now = os::Timer::getTime();
+	u32 now = time;
 	u32 timediff = now - lastEmitTime;
 	lastEmitTime = now;
 
@@ -321,7 +326,10 @@ void CParticleSystemSceneNode::doParticleSystem(u32 time)
 	for (s32 i=0; i<(s32)Particles.size();)
 	{
 		if (now > Particles[i].endTime)
-			Particles.erase(i);
+		{
+			Particles[i] = Particles.getLast();
+			Particles.erase(Particles.size()-1);
+		}
 		else
 		{
 			Particles[i].pos += (Particles[i].vector * scale);

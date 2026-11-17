@@ -52,8 +52,8 @@ public:
 	
 		Iterator& operator ++() { current = current->next; return *this; };
 		Iterator& operator --() { current = current->prev; return *this; };
-		Iterator operator ++(s32) { Iterator tmp = *this; current = current->next; return tmp; };
-  		Iterator operator --(s32) { Iterator tmp = *this; current = current->prev; return tmp; };
+		Iterator operator ++(int) { Iterator tmp = *this; current = current->next; return tmp; };
+  		Iterator operator --(int) { Iterator tmp = *this; current = current->prev; return tmp; };
 
 		Iterator operator+(s32 num) const 
 		{ 

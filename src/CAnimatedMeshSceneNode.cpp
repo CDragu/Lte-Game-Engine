@@ -45,6 +45,20 @@ namespace engine
 namespace scene
 {
 
+namespace
+{
+	inline bool usePspDmaPath(const video::SMaterial& material, bool transparent)
+	{
+		return !transparent &&
+			material.MaterialType != video::EMT_SPHERE_MAP &&
+			material.MaterialType != video::EMT_REFLECTION_2_LAYER &&
+			material.MaterialType != video::EMT_TRANSPARENT_REFLECTION_2_LAYER &&
+			material.MaterialType != video::EMT_PARALLAX_MAP_SOLID &&
+			!material.Clipping &&
+			!material.Flags[video::EMF_CLIPPING];
+	}
+}
+
 
 
 //! constructor
@@ -222,8 +236,12 @@ void CAnimatedMeshSceneNode::OnPreRender()
 
 	}
 
-	if ( Mesh->getMeshType() == EAMT_MD2)
-		if (getMaterial(0).Flags[video::EMF_DMA] == true)
+	if ( Mesh->getMeshType() == EAMT_MD2 && !Materials.empty())
+	{
+		video::IVideoDriver* driver = SceneManager->getVideoDriver();
+		video::IMaterialRenderer* rnd =
+			driver ? driver->getMaterialRenderer(Materials[0].MaterialType) : 0;
+		if (usePspDmaPath(Materials[0], rnd && rnd->isTransparent()))
 		{
 
 			if (indexOfMD2 != 0) {
@@ -246,6 +264,7 @@ void CAnimatedMeshSceneNode::OnPreRender()
 				((IAnimatedMeshMD2*)Mesh)->setInterpolationBuffer(indexOfMD2);
 			}
 		}
+	}
 
 
 	ISceneNode::OnPreRender();
@@ -413,14 +432,17 @@ void CAnimatedMeshSceneNode::render()
 	++PassCount;
 
 
-	if ( Mesh->getMeshType() == EAMT_MD2)
-		if (getMaterial(0).Flags[video::EMF_DMA] == true)
+	if ( Mesh->getMeshType() == EAMT_MD2 && !Materials.empty())
+	{
+		video::IMaterialRenderer* md2Renderer = driver->getMaterialRenderer(Materials[0].MaterialType);
+		if (usePspDmaPath(Materials[0], md2Renderer && md2Renderer->isTransparent()))
 		{
 			if (indexOfMD2 != 0)
 			{
 				((IAnimatedMeshMD2*)Mesh)->setInterpolationBuffer(indexOfMD2);
 			}
 		}
+	}
 
 	scene::IMesh* m = Mesh->getMesh(framenr, 255, StartFrame, EndFrame);
 
@@ -462,8 +484,14 @@ void CAnimatedMeshSceneNode::render()
 			{
 
 				scene::IMeshBuffer* mb = m->getMeshBuffer(i);
+				video::SMaterial material = Materials[i];
+				if (usePspDmaPath(material, transparent))
+				{
+					material.Flags[video::EMF_DMA] = true;
+					material.DisableFlush = true;
+				}
 
-				driver->setMaterial(Materials[i]);
+				driver->setMaterial(material);
 
 				driver->drawMeshBuffer(mb);
 

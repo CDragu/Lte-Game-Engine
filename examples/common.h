@@ -63,5 +63,5 @@ int setupPSP(void)
    #ifdef PSP_ENABLE_DEBUG
     pspDebugScreenInit();
    #endif
-
+   return 0;
 }

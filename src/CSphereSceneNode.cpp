@@ -223,7 +223,17 @@ void CSphereSceneNode::render()
 
 	if (VertexCount && IndexCount)
 	{
-		driver->setMaterial(Material);
+		video::SMaterial material = Material;
+		video::IMaterialRenderer* rnd = driver->getMaterialRenderer(material.MaterialType);
+		if (!(rnd && rnd->isTransparent()) &&
+			!material.Clipping &&
+			!material.Flags[video::EMF_CLIPPING])
+		{
+			material.StaticMesh = true;
+			material.DisableFlush = true;
+		}
+
+		driver->setMaterial(material);
 		driver->setTransform(video::ETS_WORLD, AbsoluteTransformation);
 		driver->drawIndexedTriangleList(Vertices, VertexCount, Indices, IndexCount/3);
 		if (DebugDataVisible)
@@ -262,7 +272,12 @@ const core::aabbox3d<f32>& CSphereSceneNode::getBoundingBox() const
 void CSphereSceneNode::OnPreRender()
 {
 	if (IsVisible)
-		SceneManager->registerNodeForRendering(this);
+	{
+		video::IVideoDriver* driver = SceneManager->getVideoDriver();
+		video::IMaterialRenderer* rnd = driver ? driver->getMaterialRenderer(Material.MaterialType) : 0;
+		SceneManager->registerNodeForRendering(this,
+			(rnd && rnd->isTransparent()) ? scene::ESNRP_TRANSPARENT : scene::ESNRP_SOLID);
+	}
 
 	ISceneNode::OnPreRender();
 }

@@ -26,7 +26,7 @@
 #define __engine__C_NETWORK_DRIVER__
 
 #include "INetworkDriver.h"
-#include <sys/fd_set.h>
+#include <sys/select.h>
 
 namespace engine
 {

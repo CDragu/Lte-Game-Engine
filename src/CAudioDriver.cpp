@@ -41,6 +41,9 @@
 //#include <pspnet_inet.h>
 #include <malloc.h>
 #include <pspsdk.h>
+#include <pspiofilemgr.h>
+#include <stdarg.h>
+#include <stdio.h>
 #define printf pspDebugScreenPrintf
 
 extern "C" {
@@ -59,11 +62,49 @@ extern "C" {
 
 extern bool __inet_sdk_modules_loaded;
 
+namespace
+{
+	const char* const BootLogPath = "ms0:/PSP/GAME/Demo/demo.log";
+
+	void bootLogWrite(const char* text)
+	{
+		SceUID fd = sceIoOpen(BootLogPath, PSP_O_WRONLY | PSP_O_CREAT | PSP_O_APPEND, 0777);
+		if (fd >= 0)
+		{
+			sceIoWrite(fd, text, strlen(text));
+			sceIoClose(fd);
+		}
+	}
+
+	void bootLogReset()
+	{
+		SceUID fd = sceIoOpen(BootLogPath, PSP_O_WRONLY | PSP_O_CREAT | PSP_O_TRUNC, 0777);
+		if (fd >= 0)
+			sceIoClose(fd);
+	}
+
+	void bootLog(const char* format, ...)
+	{
+		char buffer[256];
+		int offset = snprintf(buffer, sizeof(buffer), "[boot %u] ", sceKernelGetSystemTimeLow());
+		if (offset < 0)
+			offset = 0;
+		if (offset >= (int)sizeof(buffer))
+			offset = sizeof(buffer) - 1;
+
+		va_list args;
+		va_start(args, format);
+		vsnprintf(buffer + offset, sizeof(buffer) - offset, format, args);
+		va_end(args);
+
+		bootLogWrite(buffer);
+	}
+}
 
 PSP_MODULE_INFO("LTE_ENGINE", 0, 1, 2);
 PSP_MAIN_THREAD_ATTR(PSP_THREAD_ATTR_USER | PSP_THREAD_ATTR_VFPU);
 //PSP_HEAP_SIZE_MAX();
-PSP_HEAP_SIZE_KB(48000);
+PSP_HEAP_SIZE_KB(20480);
 
 extern int engineMain(unsigned int argc, void *argv);
 
@@ -95,12 +136,23 @@ int main()
 #else
 	int err;
 
+	bootLogReset();
+	bootLog("main start\n");
+	bootLog("loading net module common\n");
 	err = sceUtilityLoadNetModule(PSP_NET_MODULE_COMMON);
+	bootLog("sceUtilityLoadNetModule(COMMON) => %d\n", err);
 	if (!err)
+	{
+		bootLog("loading net module inet\n");
 		err = sceUtilityLoadNetModule(PSP_NET_MODULE_INET);
+		bootLog("sceUtilityLoadNetModule(INET) => %d\n", err);
+	}
 	__inet_sdk_modules_loaded = err ? false : true;
+	bootLog("__inet_sdk_modules_loaded => %d\n", __inet_sdk_modules_loaded ? 1 : 0);
 
+	bootLog("calling engineMain\n");
 	engineMain(0, NULL);
+	bootLog("engineMain returned\n");
 #endif
 
 	return 0; // suppress warning

@@ -134,7 +134,7 @@ IAnimatedMesh* COCTLoader::createMesh(engine::io::IReadFile* file)
 
 	u32 i;
 
-	if (!file) return false;
+	if (!file) return 0;
 
 	octHeader header;
 	file->read(&header, sizeof(octHeader));

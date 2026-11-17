@@ -36,6 +36,20 @@ namespace engine
 namespace scene
 {
 
+namespace
+{
+	inline bool useStaticMeshPath(const video::SMaterial& material, bool transparent)
+	{
+		return !transparent &&
+			material.MaterialType != video::EMT_SPHERE_MAP &&
+			material.MaterialType != video::EMT_REFLECTION_2_LAYER &&
+			material.MaterialType != video::EMT_TRANSPARENT_REFLECTION_2_LAYER &&
+			material.MaterialType != video::EMT_PARALLAX_MAP_SOLID &&
+			!material.Clipping &&
+			!material.Flags[video::EMF_CLIPPING];
+	}
+}
+
 
 //! constructor
 COctTreeSceneNode::COctTreeSceneNode(ISceneNode* parent, ISceneManager* mgr,
@@ -153,7 +167,17 @@ void COctTreeSceneNode::render()
 			// and solid only in solid pass
 			if (transparent == isTransparentPass)
 			{
-				driver->setMaterial(Materials[i]);
+				video::SMaterial material = Materials[i];
+				// OctTree chunks are already culled against the camera frustum, so
+				// forcing software clipping here only adds heavy PSP CPU overhead.
+				material.Clipping = false;
+				material.Flags[video::EMF_CLIPPING] = false;
+				if (useStaticMeshPath(material, transparent))
+				{
+					material.StaticMesh = true;
+					material.DisableFlush = true;
+				}
+				driver->setMaterial(material);
 				driver->drawIndexedTriangleList(
 				        &StdMeshes[i].Vertices[0], StdMeshes[i].Vertices.size(),
 				        d[i].Indices, d[i].CurrentSize / 3);
@@ -190,7 +214,17 @@ void COctTreeSceneNode::render()
 			// and solid only in solid pass
 			if (transparent == isTransparentPass)
 			{
-				driver->setMaterial(Materials[i]);
+				video::SMaterial material = Materials[i];
+				// OctTree chunks are already culled against the camera frustum, so
+				// forcing software clipping here only adds heavy PSP CPU overhead.
+				material.Clipping = false;
+				material.Flags[video::EMF_CLIPPING] = false;
+				if (useStaticMeshPath(material, transparent))
+				{
+					material.StaticMesh = true;
+					material.DisableFlush = true;
+				}
+				driver->setMaterial(material);
 				driver->drawIndexedTriangleList(
 				        &LightMapMeshes[i].Vertices[0], LightMapMeshes[i].Vertices.size(),
 				        d[i].Indices, d[i].CurrentSize / 3);

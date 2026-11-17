@@ -944,7 +944,6 @@ const core::aabbox3d<f32>& CSceneManager::getBoundingBox() const
 //! returns if node is culled
 bool CSceneManager::isCulled(ISceneNode* Mesh)
 {
-	bool culled;
 	if (!Mesh->getAutomaticCulling())
 		return false;
 
@@ -952,12 +951,21 @@ bool CSceneManager::isCulled(ISceneNode* Mesh)
 	if (!cam)
 		return false;
 
+	const SViewFrustrum* viewFrustum = cam->getViewFrustrum();
+	if (!viewFrustum)
+		return false;
+
 	core::aabbox3d<f32> tbox = Mesh->getBoundingBox();
 	Mesh->getAbsoluteTransformation().transformBox(tbox);
-	return !(tbox.intersectsWithBox(cam->getViewFrustrum()->boundingBox));
 
+	if (!tbox.intersectsWithBox(viewFrustum->boundingBox))
+		return true;
 
-	return culled;
+	for (s32 i = 0; i < SViewFrustrum::VF_PLANE_COUNT; ++i)
+		if (tbox.classifyPlaneRelation(viewFrustum->planes[i]) == core::ISREL3D_FRONT)
+			return true;
+
+	return false;
 
 }
 
@@ -1060,7 +1068,8 @@ void CSceneManager::drawAll()
 
 
 	CurrentRendertime = ESNRP_SOLID;
-	SolidNodeList.sort(); // sort by textures
+	if (SolidNodeList.size() > 1)
+		SolidNodeList.sort(); // sort by textures
 
 	for (i=0; i<SolidNodeList.size(); ++i)
 		SolidNodeList[i].node->render();
@@ -1069,7 +1078,8 @@ void CSceneManager::drawAll()
 
 
 	CurrentRendertime = ESNRP_PLANARSHADOW;
-	PlanarShadowNodeList.sort(); // sort by textures
+	if (PlanarShadowNodeList.size() > 1)
+		PlanarShadowNodeList.sort(); // sort by textures
 
 	for (i=0; i<PlanarShadowNodeList.size(); ++i)
 		PlanarShadowNodeList[i]->render();
@@ -1099,7 +1109,8 @@ void CSceneManager::drawAll()
 
 	CurrentRendertime = ESNRP_TRANSPARENT;
 
-	TransparentNodeList.sort(); // sort by distance from camera
+	if (TransparentNodeList.size() > 1)
+		TransparentNodeList.sort(); // sort by distance from camera
 
 	for (i=0; i<TransparentNodeList.size(); ++i)
 		TransparentNodeList[i].node->render();

@@ -119,14 +119,14 @@ IAnimatedMesh* CDMFLoader::createMesh(engine::io::IReadFile* file)
 	u32 i;
 
 	if (!file)
-		return false;
+		return 0;
 
 	StringList dmfRawFile;
 
 	//Load stringlist
 	dmfRawFile.LoadFromFile(file);
 	if (dmfRawFile.size()<1)
-		return false;
+		return 0;
 
 	//begin logging with
 	//fprintf(flog,"DMF Loader version %1.1f log file\nTrying to load: %s\n",DMFloader_vers,file->getFileName());

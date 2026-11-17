@@ -36,6 +36,20 @@ namespace engine
 namespace scene
 {
 
+namespace
+{
+	inline bool useStaticMeshPath(const video::SMaterial& material, bool transparent)
+	{
+		return !transparent &&
+			material.MaterialType != video::EMT_SPHERE_MAP &&
+			material.MaterialType != video::EMT_REFLECTION_2_LAYER &&
+			material.MaterialType != video::EMT_TRANSPARENT_REFLECTION_2_LAYER &&
+			material.MaterialType != video::EMT_PARALLAX_MAP_SOLID &&
+			!material.Clipping &&
+			!material.Flags[video::EMF_CLIPPING];
+	}
+}
+
 
 
 //! constructor
@@ -200,7 +214,13 @@ void CMeshSceneNode::render()
 		if (transparent == isTransparentPass)
 		{
 			scene::IMeshBuffer* mb = Mesh->getMeshBuffer(i);
-			driver->setMaterial(Materials[i]);
+			video::SMaterial material = Materials[i];
+			if (useStaticMeshPath(material, transparent))
+			{
+				material.StaticMesh = true;
+				material.DisableFlush = true;
+			}
+			driver->setMaterial(material);
 			driver->drawMeshBuffer(mb);
 		}
 	}

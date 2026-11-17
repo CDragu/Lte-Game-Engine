@@ -1,0 +1,25 @@
+# PSP / build artifacts
+*.o
+*.a
+*.so
+*.d
+*.elf
+*.prx
+*.map
+*.out
+*.bin
+*.sfo
+*.pbp
+*.PBP
+
+# Generated package metadata
+PARAM.SFO
+EBOOT.PBP
+
+# Logs and local debug output
+*.log
+
+# Tooling / editor leftovers
+*~
+*.swp
+*.swo

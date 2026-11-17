@@ -84,7 +84,10 @@ void CBillboardSceneNode::OnPreRender()
 
 	if (IsVisible)
 	{
-		SceneManager->registerNodeForRendering(this);
+		video::IVideoDriver* driver = SceneManager->getVideoDriver();
+		video::IMaterialRenderer* rnd = driver ? driver->getMaterialRenderer(Material.MaterialType) : 0;
+		SceneManager->registerNodeForRendering(this,
+			(rnd && rnd->isTransparent()) ? scene::ESNRP_TRANSPARENT : scene::ESNRP_SOLID);
 		ISceneNode::OnPreRender();
 	}
 //		printf("billboard %d\n", os::Timer::getRealTime() -d);
@@ -149,7 +152,9 @@ void CBillboardSceneNode::render()
 	core::matrix4 mat;
 	driver->setTransform(video::ETS_WORLD, mat);
 
-	driver->setMaterial(Material);
+	video::SMaterial material = Material;
+	material.DisableFlush = true;
+	driver->setMaterial(material);
 
 	driver->drawIndexedTriangleList(vertices, 4, indices, 2);
 }

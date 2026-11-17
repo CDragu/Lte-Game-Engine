@@ -97,6 +97,7 @@ bool __using_bezier_patches = false;
 int __bezier_mesh_size = 0;
 
 int __lastvblank = 0;
+int __lte_view_frustum_dirty = 1;
 
 extern core::matrix4 light_matrix;
 extern audio::IAudioDriver *__lte_intdrv;
@@ -241,8 +242,8 @@ void CSoftwareDriver2::setMultipassRender(int num)
 	}
 }
 
-BspClipVertex *vertexStack;
-unsigned short *vertexStackIndex;
+BspClipVertex *vertexStack = 0;
+unsigned short *vertexStackIndex = 0;
 
 //! constructor
 CSoftwareDriver2::CSoftwareDriver2(const core::dimension2d<s32>& windowSize, bool fullscreen, io::IFileSystem* io, video::IImagePresenter* presenter, gui::ICursorControl* curctrl, bool showLogo)
@@ -264,6 +265,10 @@ CSoftwareDriver2::CSoftwareDriver2(const core::dimension2d<s32>& windowSize, boo
 
 	ScreenSize.Width = 480;
 	ScreenSize.Height = 272;
+	Texture[0] = 0;
+	Texture[1] = 0;
+	__second_texture = 0;
+	__lte_view_frustum_dirty = 1;
 	createMaterialRenderers();
 
 
@@ -731,6 +736,11 @@ void CSoftwareDriver2::createMaterialRenderers()
 //! destructor
 CSoftwareDriver2::~CSoftwareDriver2()
 {
+	delete [] vertexStack;
+	vertexStack = 0;
+
+	delete [] vertexStackIndex;
+	vertexStackIndex = 0;
 
 }
 
@@ -964,6 +974,7 @@ bool CSoftwareDriver2::queryFeature(E_VIDEO_DRIVER_FEATURE feature)
 void CSoftwareDriver2::setTransform(E_TRANSFORMATION_STATE state, const core::matrix4& mat)
 {
 	Transformation3DChanged = true;
+	__lte_view_frustum_dirty = 1;
 
 	GLfloat glmat[16];
 	Matrizes[state] = mat;
@@ -997,11 +1008,6 @@ void CSoftwareDriver2::setTransform(E_TRANSFORMATION_STATE state, const core::ma
 	}
 		break;
 	}
-	f32 modelMatrix[16], projectionMatrix[16];
-	glGetFloatv(GL_MODELVIEW_MATRIX, modelMatrix);
-	glGetFloatv(GL_PROJECTION_MATRIX, projectionMatrix);
-	CalculateViewFrustum( &myVFrustum, projectionMatrix, modelMatrix );
-
 
 }
 
@@ -1013,6 +1019,15 @@ void CSoftwareDriver2::setTexture(u32 stage, video::ITexture* texture)
 {
 	if (stage > 1)
 		return;
+
+	if (Texture[stage] == texture)
+	{
+		if (stage == 1)
+			__second_texture = texture;
+		return;
+	}
+
+	Texture[stage] = texture;
 
 	if (texture == 0)
 	{
@@ -1070,6 +1085,9 @@ __vect3dcol* __rect2d = (__vect3dcol*)&__buffer_2d[0];
 //! clears the zbuffer
 bool CSoftwareDriver2::beginScene(bool backBuffer, bool zBuffer, SColor color)
 {
+	if (sceDisplayGetVcount() == __lastvblank)
+		sceDisplayWaitVblankStart();
+
 	//__buffer_2dc = 0;
 	f32 inv = 1.0f / 255.0f;
 	glClearColor(color.getRed() * inv, color.getGreen() * inv,
@@ -1086,7 +1104,7 @@ bool CSoftwareDriver2::beginScene(bool backBuffer, bool zBuffer, SColor color)
 	__lte_current_size_vbo2 = 0;
 	__lte_current_size_vbo1 = 0;
 
-	if (enableClipping == true) {
+	if (enableClipping == true && vertexStack == 0) {
 
 		vertexStack = new BspClipVertex[30000];
 		vertexStackIndex = new u16[65535];
@@ -1128,7 +1146,6 @@ bool CSoftwareDriver2::endScene( s32 windowId, core::rect<s32>* sourceRect )
 		if (tv.tv_sec - startTime > 600) return false;
 	}
 
-	CNullDriver::endScene();
 	// Draw cursor to the screen if is visible
 
 #if 0
@@ -1295,17 +1312,11 @@ bool CSoftwareDriver2::endScene( s32 windowId, core::rect<s32>* sourceRect )
 	}
 
 
-	if (sceDisplayGetVcount() == __lastvblank) return true;
-	__lastvblank = sceDisplayGetVcount();
-
-
 
 	glutSwapBuffers();
+	__lastvblank = sceDisplayGetVcount();
+	CNullDriver::endScene();
 
-	if (enableClipping == true) {
-		delete vertexStack;
-		delete vertexStackIndex;
-	}
 
 	return true;
 }
@@ -2097,6 +2108,15 @@ core::CMemory *CSoftwareDriver2::getMemoryBuffer()
 
 void CSoftwareDriver2::drawClippedShadow(int triangleCount, core::vector3df* vertices, u16 *indices)
 {
+	if (__lte_view_frustum_dirty)
+	{
+		f32 modelMatrix[16], projectionMatrix[16];
+		glGetFloatv(GL_MODELVIEW_MATRIX, modelMatrix);
+		glGetFloatv(GL_PROJECTION_MATRIX, projectionMatrix);
+		CalculateViewFrustum(&myVFrustum, projectionMatrix, modelMatrix);
+		__lte_view_frustum_dirty = 0;
+	}
+
 
 	mem.CFlushMemory();
 	core::vector3df *ptr = (core::vector3df*)mem.CMemoryAlloc(0);
@@ -2283,6 +2303,14 @@ prova:
 	int b = triangleCount*3, l = 0, i = 0;
 	bool run = true;
 
+	if (__lte_view_frustum_dirty)
+	{
+		f32 modelMatrix[16], projectionMatrix[16];
+		glGetFloatv(GL_MODELVIEW_MATRIX, modelMatrix);
+		glGetFloatv(GL_PROJECTION_MATRIX, projectionMatrix);
+		CalculateViewFrustum(&myVFrustum, projectionMatrix, modelMatrix);
+		__lte_view_frustum_dirty = 0;
+	}
 
 	ptr = &vertexStack[__lte_current_size_vbo1];
 	indexes = &vertexStackIndex[__lte_current_size_vbo2];
@@ -2814,10 +2842,6 @@ void CSoftwareDriver2::setRenderStates3DMode()
 		glLoadMatrixf(glmat2);
 
 		ResetRenderStates = true;
-		f32 modelMatrix[16], projectionMatrix[16];
-		glGetFloatv(GL_MODELVIEW_MATRIX, modelMatrix);
-		glGetFloatv(GL_PROJECTION_MATRIX, projectionMatrix);
-		CalculateViewFrustum( &myVFrustum, projectionMatrix, modelMatrix );
 	}
 
 	if (ResetRenderStates)

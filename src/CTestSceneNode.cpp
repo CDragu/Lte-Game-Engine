@@ -51,6 +51,8 @@ CTestSceneNode::CTestSceneNode(f32 size, ISceneNode* parent, ISceneManager* mgr,
 
 	Material.Wireframe = false;
 	Material.Lighting = false;
+	Material.StaticMesh = true;
+	Material.DisableFlush = true;
 
 	// nicer texture mapping sent in by Dr Andros C Bragianos
 	// .. and then improved by jox.
@@ -122,7 +124,12 @@ const core::aabbox3d<f32>& CTestSceneNode::getBoundingBox() const
 void CTestSceneNode::OnPreRender()
 {
 	if (IsVisible)
-		SceneManager->registerNodeForRendering(this);
+	{
+		video::IVideoDriver* driver = SceneManager->getVideoDriver();
+		video::IMaterialRenderer* rnd = driver ? driver->getMaterialRenderer(Material.MaterialType) : 0;
+		SceneManager->registerNodeForRendering(this,
+			(rnd && rnd->isTransparent()) ? scene::ESNRP_TRANSPARENT : scene::ESNRP_SOLID);
+	}
 
 	ISceneNode::OnPreRender();
 }

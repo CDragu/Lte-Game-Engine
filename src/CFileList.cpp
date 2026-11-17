@@ -24,24 +24,18 @@
  
 #include "CFileList.h"
 #include "engineCompileConfig.h"
+#include <dirent.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 namespace engine
 {
 namespace io
 {
-
-
-#include <dirent.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <unistd.h>
-
-#include <pspdebug.h>
-#define printf pspDebugScreenPrintf
 
 
 CFileList::CFileList()
@@ -79,12 +73,12 @@ CFileList::CFileList()
 			if (stat(namelist->d_name, &buf)==0)
 			{
 				entry.Size = buf.st_size;
-				entry.isDirectory =     S_ISDIR(buf.st_mode);
+				entry.isDirectory = S_ISDIR(buf.st_mode);
 			}
 			else
 			{
 				entry.Size = 0;
-				entry.isDirectory =     FIO_SO_ISDIR(namelist->d_stat.st_mode);
+				entry.isDirectory = false;
 			}
 
 			if (entry.isDirectory)
