@@ -11,6 +11,8 @@
 #include "Tuning.h"
 #include "TuningPhysics.h"
 #include "TuningOverlay.h"
+#include "GameSounds.h"
+#include "SoundCues.h"
 #include <pspctrl.h>
 #include "../common.h"
 
@@ -137,13 +139,16 @@ int engineMain(unsigned int argc,void* argv)
     Input input;
     engineDevice* device=createDevice(&input);
     if(!device) return 1;
+    // Large synthesized PCM bank lives in static storage, not PSP stack.
+    static tower::GameSounds sounds;
+    sounds.initialize(); // failure is nonfatal; audio stays silent
     device->getCursorControl()->setVisible(false);
 
     video::IVideoDriver* driver=device->getVideoDriver();
     scene::ISceneManager* smgr=device->getSceneManager();
     gui::IGUIEnvironment* gui=device->getGUIEnvironment();
     gui::IGUIFont* font=gui->getBuiltInFont();
-    if(!driver || !smgr) { device->drop(); return 1; }
+    if(!driver || !smgr) { sounds.shutdown(); device->drop(); return 1; }
 
     scene::ICameraSceneNode* camera=smgr->addCameraSceneNode(
         0,core::vector3df(0,3.25f,-18.5f),core::vector3df(0,3.25f,0));
@@ -175,7 +180,7 @@ int engineMain(unsigned int argc,void* argv)
 
     tower::Body hangingBody=tower::Body::box(1.6f,1.0f,1.2f,0.0f,5.2f);
     scene::ISceneNode* hanging=createBox(smgr,hangingBody,blockColors[3]);
-    if(!hanging) { device->drop(); return 1; }
+    if(!hanging) { sounds.shutdown(); device->drop(); return 1; }
 
     // Decorative menu scene: separate nodes, no physics, no external textures.
     // Same camera as gameplay, but only one set of nodes is visible at a time.
@@ -206,11 +211,12 @@ int engineMain(unsigned int argc,void* argv)
     int score=0;
     tower::HudRenderer hudRenderer;
     tower::StackProgress stackProgress;
+    tower::SoundCues soundCues;
     stackProgress.reset(world.bodyCount()-1);
     tower::TowerFailureRule failureRule;
     failureRule.reset(world,1); // top of the lowest seeded 'spine' block
     float simTime=0.0f,swingPhase=0.0f,accumulator=0.0f,physicsMs=0.0f,menuTime=0.0f;
-    float fadeRemaining=0.0f;
+    float fadeRemaining=0.0f, exitDelay=0.0f;
     bool dropped=false, paused=false,showDebug=true;
     int droppedSteps=0,stepsThisFrame=0;
     u32 previous=device->getTimer()->getRealTime();
@@ -229,15 +235,18 @@ int engineMain(unsigned int argc,void* argv)
         const bool editing=((pad.Buttons & PSP_CTRL_LTRIGGER)!=0) &&
                            flow.screen()!=tower::MenuFlow::MAIN_MENU;
         if(editing) {
-            if(input.upRequested) tuningEditor.up();
-            if(input.downRequested) tuningEditor.down();
-            if(input.leftRequested) tuningEditor.change(tuning,-1);
-            if(input.rightRequested) tuningEditor.change(tuning,1);
+            if(input.upRequested) { tuningEditor.up(); sounds.play(tower::SoundSynth::MENU_MOVE); }
+            if(input.downRequested) { tuningEditor.down(); sounds.play(tower::SoundSynth::MENU_MOVE); }
+            bool changed=false;
+            if(input.leftRequested) changed=tuningEditor.change(tuning,-1) || changed;
+            if(input.rightRequested) changed=tuningEditor.change(tuning,1) || changed;
+            if(changed) sounds.play(tower::SoundSynth::TUNE_CHANGE);
             // Keep the simulation live, but consume gameplay actions.
             input.clearRequests();
         }
         if(tuningHeldLastFrame && !editing) {
             const bool saved=tuning.save(tuningFile);
+            sounds.play(saved ? tower::SoundSynth::TUNE_SAVED : tower::SoundSynth::MENU_BACK);
             tuningStatus=saved ? L"TUNING SAVED" : L"SAVE FAILED - CHECK GAME FOLDER";
             tuningStatusSeconds=3.5f;
         }
@@ -247,21 +256,33 @@ int engineMain(unsigned int argc,void* argv)
             if(tuningStatusSeconds<0.0f) tuningStatusSeconds=0.0f;
         }
 
-        if(flow.screen()==tower::MenuFlow::MAIN_MENU) {
+        if(flow.screen()==tower::MenuFlow::EXIT_REQUESTED) {
+            // Let the selection cue complete before shutting down audio.
+            exitDelay-=frameSeconds;
+            input.clearRequests();
+            if(exitDelay<=0.0f) {
+                device->closeDevice();
+                break;
+            }
+        } else if(flow.screen()==tower::MenuFlow::MAIN_MENU) {
             menuTime+=frameSeconds; // simple visual animation, no physics tick
+            const tower::MenuFlow::Selection wasSelected=flow.selection();
             if(input.upRequested) flow.up();
             if(input.downRequested) flow.down();
+            if(wasSelected!=flow.selection())
+                sounds.play(tower::SoundSynth::MENU_MOVE);
             if(input.dropRequested) {
+                sounds.play(tower::SoundSynth::MENU_SELECT);
                 flow.activate();
                 if(flow.screen()==tower::MenuFlow::EXIT_REQUESTED) {
-                    device->closeDevice(); // exit the app instead of switching scenes
-                    break;
-                }
+                    exitDelay=0.22f;
+                } else {
                 // Entering Play always starts a fresh sandbox. Crucially, consume
                 // the confirming Cross press so it cannot drop the swinging block.
                 resetWorld(world);
                 tower::applyTuning(world,tuning);
                 stackProgress.reset(world.bodyCount()-1);
+                soundCues.reset();
                 failureRule.reset(world,1);
                 hudStats.setValue(stackedMetric,stackProgress.stackedCount());
                 score=0; hudStats.setValue(scoreMetric,score);
@@ -275,12 +296,14 @@ int engineMain(unsigned int argc,void* argv)
                     if(nodes[i]) nodes[i]->setVisible(true);
                 if(nodes[4]) nodes[4]->setVisible(false);
                 hanging->setVisible(true);
+                }
             }
             input.clearRequests();
         } else if(flow.screen()==tower::MenuFlow::GAME_OVER) {
             // Nothing simulates while this screen is active.
             accumulator=0.0f;
             if(input.backRequested) {
+                sounds.play(tower::SoundSynth::MENU_BACK);
                 flow.backToMenu();
                 for(int i=0;i<tower::World::MAX_BODIES;i++)
                     if(nodes[i]) nodes[i]->setVisible(false);
@@ -289,10 +312,12 @@ int engineMain(unsigned int argc,void* argv)
                     if(menuNodes[i]) menuNodes[i]->setVisible(true);
                 paused=false; frameSeconds=0.0f; fadeRemaining=0.25f;
             } else if(input.dropRequested || input.resetRequested) {
+                sounds.play(tower::SoundSynth::MENU_SELECT);
                 flow.retry();
                 resetWorld(world);
                 tower::applyTuning(world,tuning);
                 stackProgress.reset(world.bodyCount()-1);
+                soundCues.reset();
                 failureRule.reset(world,1);
                 hudStats.setValue(stackedMetric,stackProgress.stackedCount());
                 score=0; hudStats.setValue(scoreMetric,score);
@@ -310,6 +335,7 @@ int engineMain(unsigned int argc,void* argv)
             input.clearRequests();
         } else if(flow.screen()==tower::MenuFlow::PLAYING) {
             if(input.backRequested) {
+                sounds.play(tower::SoundSynth::MENU_BACK);
                 flow.backToMenu();
                 for(int i=0;i<tower::World::MAX_BODIES;i++)
                     if(nodes[i]) nodes[i]->setVisible(false);
@@ -321,9 +347,11 @@ int engineMain(unsigned int argc,void* argv)
                 input.clearRequests();
             } else {
                 if(input.resetRequested) {
+                    sounds.play(tower::SoundSynth::MENU_SELECT);
                     resetWorld(world);
                     tower::applyTuning(world,tuning);
                     stackProgress.reset(world.bodyCount()-1);
+                    soundCues.reset();
                     failureRule.reset(world,1);
                     hudStats.setValue(stackedMetric,stackProgress.stackedCount());
                     score=0; hudStats.setValue(scoreMetric,score);
@@ -334,10 +362,14 @@ int engineMain(unsigned int argc,void* argv)
                     hanging->setVisible(true);
                 }
                 if(input.pauseRequested) {
+                    sounds.play(tower::SoundSynth::PAUSE);
                     paused=!paused;
                     accumulator=0.0f;
                 }
-                if(input.debugRequested) showDebug=!showDebug;
+                if(input.debugRequested) {
+                    sounds.play(tower::SoundSynth::TUNE_CHANGE);
+                    showDebug=!showDebug;
+                }
                 stepsThisFrame=0;
                 if(!paused) {
                     if(input.dropRequested && !dropped) {
@@ -350,6 +382,8 @@ int engineMain(unsigned int argc,void* argv)
                                 nodes[index]=createBox(smgr,b,blockColors[3]);
                             if(nodes[index]) nodes[index]->setVisible(true);
                             stackProgress.beginDrop(index);
+                            soundCues.beginDrop(index);
+                            sounds.play(tower::SoundSynth::DROP);
                             dropped=true;
                             hanging->setVisible(false);
                         }
@@ -366,16 +400,20 @@ int engineMain(unsigned int argc,void* argv)
                         // Loss takes priority over successful stacking on the
                         // same tick. Freeze physics at the exact failing step.
                         if(failureRule.hasFailed(world)) {
+                            sounds.play(tower::SoundSynth::GAME_OVER);
                             flow.lose();
                             paused=false;
                             accumulator=0.0f;
                             break;
                         }
+                        const tower::SoundSynth::Effect firstHit=soundCues.afterPhysicsStep(world);
+                        if(firstHit!=tower::SoundSynth::NONE) sounds.play(firstHit);
                         stackProgress.setRequiredSettlingTime(tuning.get(tower::Tuning::SETTLING_TIME));
                         const int beforeStacking=stackProgress.stackedCount();
                         stackProgress.step(world,STEP);
                         const int newlyStacked=stackProgress.stackedCount()-beforeStacking;
                         if(newlyStacked>0) {
+                            sounds.play(tower::SoundSynth::STACK);
                             score+=newlyStacked*tuning.getInt(tower::Tuning::SCORE_PER_BLOCK);
                             hudStats.setValue(scoreMetric,score);
                         }
@@ -399,7 +437,8 @@ int engineMain(unsigned int argc,void* argv)
             }
         }
 
-        const bool inMenu=flow.screen()==tower::MenuFlow::MAIN_MENU;
+        const bool inMenu=flow.screen()==tower::MenuFlow::MAIN_MENU ||
+                          flow.screen()==tower::MenuFlow::EXIT_REQUESTED;
         tower::Vec2 swing=suspendedPosition(swingPhase,tuning);
         float menuAngle=0.0f;
         if(inMenu) {
@@ -554,6 +593,7 @@ int engineMain(unsigned int argc,void* argv)
         }
         driver->endScene();
     }
+    sounds.shutdown(); // before LTE shuts down pspaudiolib threads
     device->drop();
     return 0;
 }
