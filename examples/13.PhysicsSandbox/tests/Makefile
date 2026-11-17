@@ -1,7 +1,7 @@
 CXX ?= c++
 CXXFLAGS ?= -O2 -Wall -Wextra -std=c++98
 .PHONY: all test clean
-all: physics_tests menu_tests hud_tests failure_tests tuning_tests sound_tests audio_backend_tests weather_tests
+all: physics_tests menu_tests hud_tests failure_tests tuning_tests sound_tests audio_backend_tests weather_tests vertex_colors_tests
 physics_tests: ../Physics2D.cpp physics_tests.cpp ../Physics2D.h
 	$(CXX) $(CXXFLAGS) -I.. ../Physics2D.cpp physics_tests.cpp -o physics_tests
 menu_tests: menu_tests.cpp ../MenuFlow.h
@@ -18,7 +18,9 @@ audio_backend_tests: audio_backend_tests.cpp ../GameSounds.cpp ../GameSounds.h .
 	$(CXX) $(CXXFLAGS) -Istubs -I.. ../GameSounds.cpp ../SoundSynth.cpp audio_backend_tests.cpp -o audio_backend_tests
 weather_tests: weather_tests.cpp ../Weather.cpp ../Weather.h ../Physics2D.cpp ../Physics2D.h
 	$(CXX) $(CXXFLAGS) -I.. ../Weather.cpp ../Physics2D.cpp weather_tests.cpp -o weather_tests
-test: physics_tests menu_tests hud_tests failure_tests tuning_tests sound_tests audio_backend_tests weather_tests
+vertex_colors_tests: vertex_colors_tests.cpp ../BlockColors.h
+	$(CXX) $(CXXFLAGS) -I.. vertex_colors_tests.cpp -o vertex_colors_tests
+test: physics_tests menu_tests hud_tests failure_tests tuning_tests sound_tests audio_backend_tests weather_tests vertex_colors_tests
 	./physics_tests
 	./menu_tests
 	./hud_tests
@@ -27,5 +29,6 @@ test: physics_tests menu_tests hud_tests failure_tests tuning_tests sound_tests 
 	./sound_tests
 	./audio_backend_tests
 	./weather_tests
+	./vertex_colors_tests
 clean:
-	rm -f physics_tests menu_tests hud_tests failure_tests tuning_tests sound_tests audio_backend_tests weather_tests tuning_test_output.cfg
+	rm -f physics_tests menu_tests hud_tests failure_tests tuning_tests sound_tests audio_backend_tests weather_tests vertex_colors_tests tuning_test_output.cfg
