@@ -1,0 +1,78 @@
+#include "../Tuning.h"
+#include <stdio.h>
+#include <string.h>
+#include <math.h>
+
+using namespace tower;
+static int failures=0;
+static void check(bool okay,const char* name) {
+    printf("%s %s\n",okay?"PASS":"FAIL",name);
+    if(!okay) failures++;
+}
+static bool closeTo(float a,float b) { return fabsf(a-b)<0.001f; }
+int main() {
+    const char* path="tuning_test_output.cfg";
+    {
+        Tuning t;
+        check(Tuning::FIELD_COUNT==9,"9 tweakable fields registered");
+        check(closeTo(t.get(Tuning::GRAVITY),12.0f) &&
+              closeTo(t.get(Tuning::SETTLING_TIME),0.35f) &&
+              t.getInt(Tuning::SCORE_PER_BLOCK)==100,"expected startup defaults");
+        TuningEditor editor;
+        check(editor.selected()==0,"editor selects gravity first");
+        editor.up();
+        check(editor.selected()==0,"editor clamps first row");
+        editor.change(t,-1);
+        check(closeTo(t.get(Tuning::GRAVITY),11.5f),"negative edit applies immediately");
+        editor.down(); editor.change(t,1);
+        check(closeTo(t.get(Tuning::FRICTION),0.83f),"friction editable");
+        for(int i=0;i<100;i++) editor.down();
+        check(editor.selected()==Tuning::FIELD_COUNT-1,"editor clamps last row");
+        editor.change(t,1);
+        check(t.getInt(Tuning::SCORE_PER_BLOCK)==110,"integer scoring uses steps");
+        check(!t.set(Tuning::GRAVITY,-100.0f) &&
+              !t.set(Tuning::GRAVITY,1.0f/0.0f),"invalid values rejected");
+        check(t.save(path),"writes configuration file");
+    }
+    {
+        Tuning reloaded;
+        check(reloaded.load(path),"reads the same configuration file");
+        check(closeTo(reloaded.get(Tuning::GRAVITY),11.5f) &&
+              closeTo(reloaded.get(Tuning::FRICTION),0.83f) &&
+              reloaded.getInt(Tuning::SCORE_PER_BLOCK)==110,
+              "all edited values survived round trip");
+        check(reloaded.set(Tuning::SETTLING_TIME,1.25f),
+              "settling time can change live");
+        check(reloaded.save(path),"writes updated setting back to original path");
+        Tuning checkAgain;
+        check(checkAgain.load(path) && closeTo(checkAgain.get(Tuning::SETTLING_TIME),1.25f),
+              "second save preserves changed settling time");
+    }
+    {
+        Tuning missing;
+        check(!missing.load("file_that_does_not_exist.cfg"),"missing file leaves defaults");
+        check(closeTo(missing.get(Tuning::GRAVITY),12.0f),
+              "defaults retained when load fails");
+        check(!missing.save(""),"invalid save path rejected");
+    }
+    {
+        FILE* f=fopen(path,"w");
+        check(f!=0,"can write malformed input fixture");
+        if(f) {
+            fputs("# comment\nfriction=1.20\nunknown_future_setting=42\n"
+                  "gravity=NaN\nsettling_time=hello\n"
+                  "score_per_block=250\n",f);
+            fclose(f);
+            Tuning changed;
+            check(changed.load(path) &&
+                  closeTo(changed.get(Tuning::FRICTION),1.2f) &&
+                  closeTo(changed.get(Tuning::GRAVITY),12.0f) &&
+                  closeTo(changed.get(Tuning::SETTLING_TIME),0.35f) &&
+                  changed.getInt(Tuning::SCORE_PER_BLOCK)==250,
+                  "comments unknown invalid and valid values handled safely");
+        }
+    }
+    remove(path);
+    printf("Tuning tests: %s\n",failures?"FAILED":"PASSED");
+    return failures?1:0;
+}
