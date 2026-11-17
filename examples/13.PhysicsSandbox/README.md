@@ -36,6 +36,16 @@ Tweakable names: `gravity`, `friction`, `restitution`, `linear_damping`, `angula
 
 This is a developer feature. For release, **package the tuned file alongside the EBOOT** or later generate baked-in defaults from the tuned `tuning.cfg`. Live settings are applied in real time while the simulation runs; the game can still fail while tuning.
 
+## Sound effects (original procedural SFX)
+
+The PSP sandbox now has original short synthesized sound effects: **menu move, menu select, menu/back, block release, first impact, successful stack, game-over, pause/resume, tuning changes and tuning saved**.
+
+The native, PSP-independent `SoundSynth.h/.cpp` synthesizes ten short 44.1 kHz PCM cues on startup (small waveforms/noise, no external MP3/WAV or copyright-dependent sound assets). `GameSounds.h/.cpp` uses one channel of **LTE's existing `pspaudiolib` callback mixer**; it does **not reserve competing PSP hardware audio channels**. The callback streams pre-generated PCM on an audio thread without blocking the fixed 60 Hz gameplay loop. If no sound channel is free, the game plays silently and continues.
+
+`SoundCues.h` tracks the released block and fires **only the first contact impact**, so the engine's persistent resting contacts won't produce a buzzing sound every frame. Success audio triggers only on newly awarded stacking points, and a failure cue triggers once as the state enters Game Over. UI sounds trigger on meaningful navigation/activation/actions, including when leaving the menu and saving tuning. The newest effect interrupts the previous one on the single SFX channel; full voice mixing/adjustable sound volume remain future improvements.
+
+For PSP/PPSSPP deployment **no additional sound files** are needed. The only optional gameplay text asset is the previously introduced `tuning.cfg`. The PSP audio callback and device timing still need real PSP or PPSSPP validation.
+
 ## What works in source
 
 - Visible 3D cube nodes, a static ground cuboid and **three initially dynamic stacked rectangles** (2.5D rigid bodies).
@@ -68,7 +78,7 @@ cd examples/13.PhysicsSandbox/tests
 make test
 ```
 
-Native tests cover free fall, floor contact and rest, three-box stacking, off-center impact rotation, fixed-step repeatability, menu/navigation/game-over/retry transitions, HUD counters/stack detection, loss-plane conditions and tuning file read/write + live physics bindings. GitHub Actions runs all five suites on changes to the sandbox.
+Native tests cover free fall, floor contact and rest, three-box stacking, off-center impact rotation, fixed-step repeatability, menu/navigation/game-over/retry transitions, HUD counters/stack detection, loss-plane conditions and tuning file read/write + live physics bindings. GitHub Actions runs all six suites on changes to the sandbox.
 
 ## Architecture
 
@@ -81,9 +91,12 @@ Native tests cover free fall, floor contact and rest, three-box stacking, off-ce
 - `Tuning.h/.cpp`: testable parameter registry and plain-text persistence.
 - `TuningPhysics.h`: native-testable bridge for applying settings to the rigid-body world.
 - `TuningOverlay.h/.cpp`: LTE-only held-L settings panel.
+- `SoundSynth.h/.cpp`: deterministic original mono audio effect generation.
+- `SoundCues.h`: one-shot impact event gating.
+- `GameSounds.h/.cpp`: PSP/LTE audio callback adapter.
 - `tuning.cfg`: editable defaults file shipped alongside EBOOT.PBP.
 - `MenuFlow.h`: standalone, dependency-free menu state and navigation.
-- `tests/physics_tests.cpp`, `tests/menu_tests.cpp`, `tests/hud_tests.cpp`, `tests/failure_tests.cpp` and `tests/tuning_tests.cpp`: native regression tests.
+- `tests/physics_tests.cpp`, `tests/menu_tests.cpp`, `tests/hud_tests.cpp`, `tests/failure_tests.cpp` `tests/tuning_tests.cpp` and `tests/sound_tests.cpp`: native regression tests.
 
 ### Known limitations / validation needs
 

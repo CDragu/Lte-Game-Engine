@@ -1,5 +1,5 @@
 TARGET = PhysicsSandbox
-OBJS = main.o Physics2D.o HudRenderer.o Tuning.o TuningOverlay.o
+OBJS = main.o Physics2D.o HudRenderer.o Tuning.o TuningOverlay.o SoundSynth.o GameSounds.o
 
 INCDIR = -I ../../include/
 CFLAGS = -G0 -O2
