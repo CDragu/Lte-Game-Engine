@@ -90,11 +90,11 @@ void WeatherView::drawHud(engine::video::IVideoDriver* driver,
 {
     if(!driver || !font) return;
     // Fixed 480x272 layout; lower-left, separated from the score at upper-right.
-    const int x=8,y=199;
+    const int x=8,y=186;
     driver->draw2DRectangle(engine::video::SColor(223,11,25,43),
-                            engine::core::rect<engine::s32>(x,y,x+130,y+63));
+                            engine::core::rect<engine::s32>(x,y,x+130,y+76));
     driver->draw2DRectangle(windColor(wind.severity()),
-                            engine::core::rect<engine::s32>(x,y,x+3,y+63));
+                            engine::core::rect<engine::s32>(x,y,x+3,y+76));
     font->draw(L"WIND",
                engine::core::rect<engine::s32>(x+9,y+6,x+74,y+22),
                engine::video::SColor(255,234,241,250));
@@ -110,6 +110,13 @@ void WeatherView::drawHud(engine::video::IVideoDriver* driver,
     font->draw(direction.c_str(),
                engine::core::rect<engine::s32>(x+9,y+43,x+120,y+58),
                engine::video::SColor(255,236,242,250));
+
+    engine::core::stringw next=L"NEXT IN ";
+    next+=wind.dropsUntilChange();
+    next+=wind.dropsUntilChange()==1 ? L" DROP" : L" DROPS";
+    font->draw(next.c_str(),
+               engine::core::rect<engine::s32>(x+9,y+59,x+127,y+74),
+               engine::video::SColor(255,207,223,240));
 
     // Three flowing streaks form a visible wind icon. The strength increases
     // their length; all share the physical direction.
