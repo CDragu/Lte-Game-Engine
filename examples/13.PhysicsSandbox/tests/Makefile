@@ -1,7 +1,7 @@
 CXX ?= c++
 CXXFLAGS ?= -O2 -Wall -Wextra -std=c++98
 .PHONY: all test clean
-all: physics_tests menu_tests hud_tests failure_tests tuning_tests
+all: physics_tests menu_tests hud_tests failure_tests tuning_tests sound_tests
 physics_tests: ../Physics2D.cpp physics_tests.cpp ../Physics2D.h
 	$(CXX) $(CXXFLAGS) -I.. ../Physics2D.cpp physics_tests.cpp -o physics_tests
 menu_tests: menu_tests.cpp ../MenuFlow.h
@@ -12,11 +12,14 @@ failure_tests: failure_tests.cpp ../TowerFailureRule.h ../Physics2D.cpp ../Physi
 	$(CXX) $(CXXFLAGS) -I.. ../Physics2D.cpp failure_tests.cpp -o failure_tests
 tuning_tests: tuning_tests.cpp ../Tuning.cpp ../Tuning.h ../TuningPhysics.h ../Physics2D.cpp ../Physics2D.h
 	$(CXX) $(CXXFLAGS) -I.. ../Tuning.cpp ../Physics2D.cpp tuning_tests.cpp -o tuning_tests
-test: physics_tests menu_tests hud_tests failure_tests tuning_tests
+sound_tests: sound_tests.cpp ../SoundSynth.cpp ../SoundSynth.h ../SoundCues.h ../Physics2D.cpp ../Physics2D.h
+	$(CXX) $(CXXFLAGS) -I.. ../SoundSynth.cpp ../Physics2D.cpp sound_tests.cpp -o sound_tests
+test: physics_tests menu_tests hud_tests failure_tests tuning_tests sound_tests
 	./physics_tests
 	./menu_tests
 	./hud_tests
 	./failure_tests
 	./tuning_tests
+	./sound_tests
 clean:
-	rm -f physics_tests menu_tests hud_tests failure_tests tuning_tests tuning_test_output.cfg
+	rm -f physics_tests menu_tests hud_tests failure_tests tuning_tests sound_tests tuning_test_output.cfg

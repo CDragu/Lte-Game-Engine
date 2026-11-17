@@ -43,6 +43,8 @@ public:
     const Body& body(int index) const { return bodies_[index]; }
     int bodyCount() const { return count_; }
     int contactCount() const { return contacts_; } // count of contact points last step
+    // Whether a body touched anything in the latest step, including ground.
+    bool hasContact(int bodyIndex) const;
     int pairCount() const { return pairs_; }
     // True when the last physics step reported a support normal pointing
     // from lower to upper. Ground contact alone is not a successful stack.
