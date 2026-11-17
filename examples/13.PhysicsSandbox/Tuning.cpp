@@ -46,9 +46,9 @@ bool Tuning::adjust(int index,int direction)
     float next=e.value+(direction>0?e.step:-e.step);
     if(next<e.minimum) next=e.minimum;
     if(next>e.maximum) next=e.maximum;
-    // Quantize after each edit to avoid float drift over many button taps.
-    const float units=floorf((next-e.minimum)/e.step+0.50001f);
-    next=e.minimum+units*e.step;
+    // Keep three decimal places without snapping existing file values to
+    // a step grid anchored at zero (e.g. friction 0.78 + 0.05 = 0.83).
+    next=floorf(next*1000.0f+0.50001f)/1000.0f;
     if(next>e.maximum) next=e.maximum;
     if(e.integer) next=floorf(next+0.5f);
     if(fabsf(next-e.value)<0.00001f) return false;
