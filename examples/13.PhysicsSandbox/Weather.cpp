@@ -4,14 +4,29 @@
 namespace tower {
 static float absWind(float x) { return x<0?-x:x; }
 static float bound(float v,float a,float b) { return v<a?a:(v>b?b:v); }
-Weather::Weather() : time_(0), x_(0), derivative_(0),
-                     strength_(1.3f), gust_(0.40f), period_(14.0f) {
+
+// Deliberately authored profiles, not random; every new round has exactly the
+// same conditions. Alternating signs and strengths produce meaningful shifts.
+static float profile(int index)
+{
+    const float sequence[]={0.50f,-0.75f,0.82f,-0.38f,0.95f,-0.58f};
+    return sequence[index%6];
+}
+Weather::Weather()
+ : gustTime_(0),x_(0),derivative_(0),strength_(1.3f),gust_(0.4f),
+   period_(14.0f),fromBase_(0),toBase_(0),base_(0),transition_(1.0f),
+   dropsPerChange_(1),dropsSinceChange_(0),totalDrops_(0),weatherIndex_(0)
+{
     reset();
 }
 void Weather::reset()
 {
-    time_=0.0f;
+    gustTime_=0.0f;
     derivative_=0.0f;
+    weatherIndex_=0;
+    dropsSinceChange_=totalDrops_=0;
+    fromBase_=toBase_=base_=profile(0);
+    transition_=1.0f;
     recalculate(0.0f);
 }
 void Weather::configure(float strength,float gust,float period)
@@ -24,27 +39,47 @@ void Weather::configure(float strength,float gust,float period)
         strength_=newStrength;
         gust_=newGust;
         period_=newPeriod;
-        // Recompute only when tuning actually changes: the render loop
-        // calls configure every frame and must not erase the 60 Hz gust rate.
+        // A render-frame configure() call must not erase derivative_ or
+        // accidentally advance the weather change counter.
         recalculate(0.0f);
     }
+}
+void Weather::configureDrops(int drops)
+{
+    if(drops>=1 && drops<=30) dropsPerChange_=drops;
+}
+bool Weather::onBlockDropped()
+{
+    if(dropsSinceChange_<dropsPerChange_) ++dropsSinceChange_;
+    ++totalDrops_;
+    if(dropsSinceChange_<dropsPerChange_) return false;
+    dropsSinceChange_=0;
+    ++weatherIndex_;
+    fromBase_=base_;
+    toBase_=profile(weatherIndex_);
+    transition_=0.0f;
+    return true;
 }
 void Weather::step(float dt)
 {
     if(!(dt>0.0f && dt<=0.05f)) return;
-    time_+=dt;
-    if(time_>period_*100.0f) time_-=period_*100.0f;
+    gustTime_+=dt;
+    if(gustTime_>period_*100.0f) gustTime_-=period_*100.0f;
+    if(transition_<1.0f) {
+        transition_=bound(transition_+dt/0.85f,0.0f,1.0f);
+        const float smooth=transition_*transition_*(3.0f-2.0f*transition_);
+        base_=fromBase_+(toBase_-fromBase_)*smooth;
+    }
     recalculate(dt);
 }
 void Weather::recalculate(float dt)
 {
     const float old=x_;
-    const float cycle=6.28318530718f*time_/period_;
-    // Slowly reverse direction with an independent quicker gust ripple.
-    // Multipliers sum to <= 1 so wind never exceeds the tunable maximum.
-    const float wave=0.67f*sinf(cycle+0.8f)+
-                     (0.33f*gust_)*sinf(cycle*3.1f+1.4f);
-    x_=strength_*bound(wave,-1.0f,1.0f);
+    const float cycle=6.28318530718f*gustTime_/period_;
+    // Gusts change magnitude (not direction) between drops. The underlying
+    // crosswind switches only after the configured number of block releases.
+    const float multiplier=1.0f+gust_*0.18f*sinf(cycle);
+    x_=strength_*bound(base_*multiplier,-1.0f,1.0f);
     derivative_=dt>0.0f ? (x_-old)/dt : 0.0f;
 }
 float Weather::fraction() const
@@ -60,8 +95,6 @@ int Weather::direction() const
 Weather::Severity Weather::severity() const
 {
     if(direction()==0) return CALM;
-    // Classification uses absolute in-game wind acceleration, not percent
-    // of the tunable maximum. Weak settings must not be labelled "GALE".
     const float force=absWind(x_);
     if(force<0.65f) return BREEZE;
     if(force<1.35f) return WINDY;
