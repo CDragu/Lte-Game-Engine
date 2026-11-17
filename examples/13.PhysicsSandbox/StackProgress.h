@@ -11,7 +11,7 @@
 namespace tower {
 class StackProgress {
 public:
-    StackProgress() { reset(0); }
+    StackProgress() : requiredSettlingTime_(0.35f) { reset(0); }
     void reset(int initialBoxes) {
         initial_ = initialBoxes < 0 ? 0 : initialBoxes;
         stacked_ = initial_;
@@ -24,6 +24,10 @@ public:
         settleTime_ = 0.0f;
         counted_ = false;
     }
+    void setRequiredSettlingTime(float seconds) {
+        if(seconds>=0.05f && seconds<=3.0f) requiredSettlingTime_=seconds;
+    }
+    float requiredSettlingTime() const { return requiredSettlingTime_; }
     int stackedCount() const { return stacked_; }
     bool countedCurrentDrop() const { return counted_; }
     void step(const World& world,float dt) {
@@ -44,7 +48,7 @@ public:
                         fabsf(block.angularVelocity)<0.40f;
         if(supportedByTower && calm) {
             settleTime_+=dt;
-            if(settleTime_>=0.35f) {
+            if(settleTime_>=requiredSettlingTime_) {
                 ++stacked_;
                 counted_=true;
             }
@@ -56,6 +60,7 @@ private:
     int initial_,stacked_,candidate_;
     float settleTime_;
     bool counted_;
+    float requiredSettlingTime_;
 };
 }
 #endif

@@ -1,4 +1,6 @@
 #include "../Tuning.h"
+#include "../TuningPhysics.h"
+#include "../StackProgress.h"
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
@@ -71,6 +73,30 @@ int main() {
                   changed.getInt(Tuning::SCORE_PER_BLOCK)==250,
                   "comments unknown invalid and valid values handled safely");
         }
+    }
+    {
+        Tuning t;
+        World w;
+        int id=w.addBody(Body::box(1.0f,1.0f,1.0f,0.0f,4.0f));
+        t.set(Tuning::GRAVITY,0.0f);
+        t.set(Tuning::FRICTION,1.50f);
+        t.set(Tuning::RESTITUTION,0.70f);
+        applyTuning(w,t);
+        w.step(1.0f/60.0f);
+        check(fabsf(w.body(id).velocity.y)<0.001f,
+              "zero gravity takes effect next physics step");
+        check(closeTo(w.body(id).friction,1.5f) &&
+              closeTo(w.body(id).restitution,0.7f),
+              "friction and restitution apply to active bodies");
+        t.set(Tuning::GRAVITY,30.0f);
+        applyTuning(w,t);
+        w.step(1.0f/60.0f);
+        check(w.body(id).velocity.y<-0.45f,
+              "changing gravity affects existing body immediately");
+        StackProgress p;
+        p.setRequiredSettlingTime(1.25f);
+        check(closeTo(p.requiredSettlingTime(),1.25f),
+              "tuning settling time reaches stacking rule");
     }
     remove(path);
     printf("Tuning tests: %s\n",failures?"FAILED":"PASSED");
