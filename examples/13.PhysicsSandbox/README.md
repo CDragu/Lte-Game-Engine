@@ -60,6 +60,16 @@ The native, PSP-independent `SoundSynth.h/.cpp` synthesizes ten short 44.1 kHz P
 
 For PSP/PPSSPP deployment **no additional sound files** are needed. The only optional gameplay text asset is the previously introduced `tuning.cfg`. The PSP audio callback and device timing still need real PSP or PPSSPP validation.
 
+## Texture-free vertex-coloured blocks
+
+All physics tower blocks (including the falling/suspended block), the decorative menu tower, and their ground platforms now render using a custom **`ColoredBlockNode`** with **per-vertex RGB colours**, not material tinting or textures. Each box uses 24 vertices (four for each of its six faces) and 12 triangles. Every face stores an RGB colour in `S3DVertex::Color`, which LTE's PSP driver renders via its vertex-colour path. The front/back/left/right/top/bottom faces have subtly different baked brightness, so the cubes look three-dimensional **without lighting, shader or texture assets**.
+
+`BlockColors.h` generates a vivid deterministic palette using golden-angle hue spacing. Each successive tower block gets a different colour (verified for the first 64), while `groundColor()` returns a neutral grey. The currently hanging preview uses the same colour index as its released body; restarting produces the same colours rather than random flashes. The menu's decorative blocks follow the same palette.
+
+To change the colour scheme later, edit only `BlockColors.h`. `ColoredBlockNode.h/.cpp` owns geometry and PSP rendering, while `main.cpp::createBox` connects it to the existing scene/physics positions.
+
+**PSP validation still required:** the native test exercises palette determinism, distinctness and per-face shading. It does not compile the PSP scene node or visually verify PSP/PPSSPP vertex colour output; do that during an emulator/hardware playtest.
+
 ## What works in source
 
 - Visible 3D cube nodes, a static ground cuboid and **three initially dynamic stacked rectangles** (2.5D rigid bodies).
@@ -92,7 +102,7 @@ cd examples/13.PhysicsSandbox/tests
 make test
 ```
 
-Native tests cover free fall, floor contact and rest, three-box stacking, off-center impact rotation, fixed-step repeatability, menu/navigation/game-over/retry transitions, HUD counters/stack detection, loss-plane conditions and tuning file read/write + live physics bindings. GitHub Actions runs all eight suites on changes to the sandbox. The audio suite compiles and exercises the PSP audio callback adapter using native stubs; the weather suite tests deterministic gusts, weather switching on the configurable drop threshold (not elapsed time), reset, tuning, and force/torque applied to dynamic blocks. Native tests do not replace a PSP build.
+Native tests cover free fall, floor contact and rest, three-box stacking, off-center impact rotation, fixed-step repeatability, menu/navigation/game-over/retry transitions, HUD counters/stack detection, loss-plane conditions and tuning file read/write + live physics bindings. GitHub Actions runs all nine suites on changes to the sandbox. The audio suite compiles and exercises the PSP audio callback adapter using native stubs; the weather suite tests deterministic gusts, weather switching on the configurable drop threshold (not elapsed time), reset, tuning, and force/torque applied to dynamic blocks. Native tests do not replace a PSP build.
 
 ## Architecture
 
@@ -109,10 +119,12 @@ Native tests cover free fall, floor contact and rest, three-box stacking, off-ce
 - `SoundCues.h`: one-shot impact event gating.
 - `Weather.h/.cpp`: deterministic PSP-independent wind model and strength categories.
 - `WeatherView.h/.cpp`: bottom-left weather HUD plus moving 3D arrow scene nodes.
+- `BlockColors.h`: PSP-independent deterministic block RGB palette and per-face shading.
+- `ColoredBlockNode.h/.cpp`: texture-free scene node with vertex colours on all six faces.
 - `GameSounds.h/.cpp`: PSP/LTE audio callback adapter.
 - `tuning.cfg`: editable defaults file shipped alongside EBOOT.PBP.
 - `MenuFlow.h`: standalone, dependency-free menu state and navigation.
-- `tests/physics_tests.cpp`, `tests/menu_tests.cpp`, `tests/hud_tests.cpp`, `tests/failure_tests.cpp` `tests/tuning_tests.cpp`, `tests/sound_tests.cpp`, `tests/audio_backend_tests.cpp` and `tests/weather_tests.cpp`: native regression tests.
+- `tests/physics_tests.cpp`, `tests/menu_tests.cpp`, `tests/hud_tests.cpp`, `tests/failure_tests.cpp` `tests/tuning_tests.cpp`, `tests/sound_tests.cpp`, `tests/audio_backend_tests.cpp` and `tests/weather_tests.cpp` and `tests/vertex_colors_tests.cpp`: native regression tests.
 
 ### Known limitations / validation needs
 

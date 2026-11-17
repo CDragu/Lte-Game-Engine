@@ -15,6 +15,8 @@
 #include "SoundCues.h"
 #include "Weather.h"
 #include "WeatherView.h"
+#include "ColoredBlockNode.h"
+#include "BlockColors.h"
 #include <pspctrl.h>
 #include "../common.h"
 
@@ -113,17 +115,17 @@ static void resetWorld(tower::World& w)
 }
 
 static scene::ISceneNode* createBox(scene::ISceneManager* smgr,
-                                   const tower::Body& b, const video::SColor& color)
+                                   const tower::Body& b, const tower::BlockRgb& color)
 {
-    scene::ISceneNode* n=smgr->addTestSceneNode(1.0f);
-    if(!n) return 0;
+    if(!smgr) return 0;
+    // Store RGB on S3DVertex. No textures, lighting or material tint.
+    tower::ColoredBlockNode* n=new tower::ColoredBlockNode(
+        smgr->getRootSceneNode(),smgr,color);
     n->setScale(core::vector3df(b.halfWidth*2.0f,b.halfHeight*2.0f,0.85f));
-    n->setMaterialFlag(video::EMF_LIGHTING,false);
-    n->setMaterialFlag(video::EMF_BACK_FACE_CULLING,false);
-    n->getMaterial(0).DiffuseColor=color;
-    n->getMaterial(0).AmbientColor=color;
     n->setPosition(core::vector3df(b.position.x,b.position.y,0.0f));
     n->updateAbsolutePosition();
+    // LTE's parent scene node keeps a reference (see tutorial 03).
+    n->drop();
     return n;
 }
 
@@ -189,16 +191,12 @@ int engineMain(unsigned int argc,void* argv)
     tower::applyTuning(world,tuning);
     scene::ISceneNode* nodes[tower::World::MAX_BODIES];
     for(int i=0;i<tower::World::MAX_BODIES;i++) nodes[i]=0;
-    const video::SColor groundColor(255,90,100,115);
-    const video::SColor blockColors[4]={
-        video::SColor(255,83,184,195),video::SColor(255,105,195,155),
-        video::SColor(255,115,150,225),video::SColor(255,244,171,75)
-    };
     for(int i=0;i<world.bodyCount();i++)
-        nodes[i]=createBox(smgr,world.body(i),i==0?groundColor:blockColors[(i-1)%4]);
+        nodes[i]=createBox(smgr,world.body(i),
+                            i==0 ? tower::groundColor() : tower::blockColor(i-1));
 
     tower::Body hangingBody=tower::Body::box(1.6f,1.0f,1.2f,0.0f,5.2f);
-    scene::ISceneNode* hanging=createBox(smgr,hangingBody,blockColors[3]);
+    scene::ISceneNode* hanging=createBox(smgr,hangingBody,tower::blockColor(3));
     if(!hanging) { sounds.shutdown(); device->drop(); return 1; }
 
     // Decorative menu scene: separate nodes, no physics, no external textures.
@@ -206,16 +204,16 @@ int engineMain(unsigned int argc,void* argv)
     scene::ISceneNode* menuNodes[6];
     for(int i=0;i<6;i++) menuNodes[i]=0;
     tower::Body menuBase=tower::Body::box(4.6f,0.50f,0.0f,3.25f,-0.40f);
-    menuNodes[0]=createBox(smgr,menuBase,groundColor);
+    menuNodes[0]=createBox(smgr,menuBase,tower::groundColor());
     for(int i=1;i<=4;i++) {
         tower::Body b=tower::Body::box(1.45f,0.90f,0.0f,
             3.25f+((i%2)?-0.14f:0.17f),0.30f+(i-1)*0.90f);
         b.angle=(i%2 ? -1.0f:1.0f)*0.028f;
-        menuNodes[i]=createBox(smgr,b,blockColors[(i-1)%4]);
+        menuNodes[i]=createBox(smgr,b,tower::blockColor(i-1));
         updateNode(menuNodes[i],b);
     }
     tower::Body menuHanging=tower::Body::box(1.45f,0.90f,0.0f,3.25f,5.6f);
-    menuNodes[5]=createBox(smgr,menuHanging,blockColors[3]);
+    menuNodes[5]=createBox(smgr,menuHanging,tower::blockColor(4));
 
     // The menu is the first visible screen; do not display the paused game
     // behind it. Retain all nodes to avoid repeated PSP allocations.
@@ -407,7 +405,7 @@ int engineMain(unsigned int argc,void* argv)
                         const int index=world.addBody(b);
                         if(index>=0) {
                             if(!nodes[index])
-                                nodes[index]=createBox(smgr,b,blockColors[3]);
+                                nodes[index]=createBox(smgr,b,tower::blockColor(index-1));
                             if(nodes[index]) nodes[index]->setVisible(true);
                             stackProgress.beginDrop(index);
                             // Count actual releases, not successful landings,
