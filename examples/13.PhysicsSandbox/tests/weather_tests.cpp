@@ -85,8 +85,8 @@ int main() {
         w.configureDrops(5);
         w.onBlockDropped();w.onBlockDropped();w.onBlockDropped();
         w.configureDrops(2);
-        check(w.dropsUntilChange()<=0 || w.dropsUntilChange()==-1,
-              "live decrease in drop interval retains elapsed drops");
+        check(w.dropsUntilChange()==1,
+              "shortening interval waits for one more actual drop");
         check(w.onBlockDropped() && w.weatherIndex()==1,
               "next drop applies newly shortened interval");
         w.configureDrops(30);
