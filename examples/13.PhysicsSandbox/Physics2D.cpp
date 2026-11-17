@@ -239,7 +239,7 @@ void World::step(float dt)
 
     // Baumgarte-style penetration correction; static boxes stay fixed.
     // This simple solver is intended for a handful of blocks, not a large tower.
-    for(int m=0;m<manifoldCount;m++) {
+    for(int m=0;m<manifoldCount_;m++) {
         Contact& c=manifolds_[m];
         Body& a=bodies_[c.ia], &b=bodies_[c.ib];
         const float mass=a.invMass+b.invMass;
