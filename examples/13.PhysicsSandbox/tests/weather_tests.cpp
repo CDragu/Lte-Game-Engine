@@ -99,7 +99,7 @@ int main() {
         light.configure(0.5f,0.0f,14.0f);
         gale.configure(6.0f,0.0f,14.0f);
         check(light.severity()==Weather::BREEZE &&
-              gale.severity()==Weather::STRONG,
+              gale.severity()==Weather::GALE,
               "severity depends on physical wind force");
     }
     {
