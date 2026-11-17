@@ -37,8 +37,15 @@ World::Contact::Contact() : ia(-1),ib(-1),count(0),normal(),penetration(0.0f)
     bounce[0]=bounce[1]=0.0f;
 }
 
-World::World() { reset(); }
+World::World() : gravity_(12.0f), linearDamping_(0.04f), angularDamping_(0.06f) { reset(); }
 void World::reset() { count_=contacts_=pairs_=manifoldCount_=0; }
+
+void World::setDynamics(float gravity,float linearDamping,float angularDamping)
+{
+    if(gravity>=0.0f && gravity<=35.0f) gravity_=gravity;
+    if(linearDamping>=0.0f && linearDamping<=3.0f) linearDamping_=linearDamping;
+    if(angularDamping>=0.0f && angularDamping<=3.0f) angularDamping_=angularDamping;
+}
 
 int World::addBody(const Body& body)
 {
@@ -209,13 +216,15 @@ void World::step(float dt)
 {
     // Caller is responsible for a fixed time step; reject bad inputs.
     if(dt<=0.0f || dt>0.05f) return;
-    const float gravity=-12.0f;
+    // Bounded implicit damping; rates are per second.
+    const float linearRetention=1.0f/(1.0f+linearDamping_*dt);
+    const float angularRetention=1.0f/(1.0f+angularDamping_*dt);
     for(int i=0;i<count_;i++) {
         Body& b=bodies_[i];
         if(!b.isDynamic()) continue;
-        b.velocity.y+=gravity*dt;
-        b.velocity=b.velocity*0.9994f; // mild drag
-        b.angularVelocity*=0.999f;
+        b.velocity.y-=gravity_*dt;
+        b.velocity=b.velocity*linearRetention;
+        b.angularVelocity*=angularRetention;
         b.position+=b.velocity*dt;
         b.angle+=b.angularVelocity*dt;
     }

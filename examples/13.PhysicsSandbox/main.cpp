@@ -8,6 +8,10 @@
 #include "HudRenderer.h"
 #include "StackProgress.h"
 #include "TowerFailureRule.h"
+#include "Tuning.h"
+#include "TuningPhysics.h"
+#include "TuningOverlay.h"
+#include <pspctrl.h>
 #include "../common.h"
 
 using namespace engine;
@@ -15,26 +19,25 @@ using namespace engine;
 namespace {
 const float STEP = 1.0f/60.0f;
 const float PI = 3.14159265f;
-const float SWING_AMPLITUDE = 0.60f;
-const float SWING_RATE = 2.05f; // rad/s oscillator phase rate
 const float ROPE_LENGTH = 1.80f;
 const tower::Vec2 PIVOT(0.0f,7.0f);
 
 class Input : public IEventReceiver {
 public:
     bool dropRequested, resetRequested, pauseRequested, debugRequested;
-    bool upRequested, downRequested, backRequested;
-    bool crossDown, circleDown, startDown, selectDown, upDown, downDown, triangleDown;
+    bool upRequested, downRequested, leftRequested, rightRequested, backRequested;
+    bool crossDown, circleDown, startDown, selectDown, upDown, downDown, leftDown, rightDown, triangleDown;
     Input() : dropRequested(false), resetRequested(false),
         pauseRequested(false), debugRequested(false), upRequested(false),
-        downRequested(false), backRequested(false),
+        downRequested(false), leftRequested(false), rightRequested(false), backRequested(false),
         crossDown(false), circleDown(false), startDown(false), selectDown(false),
-        upDown(false), downDown(false), triangleDown(false) {}
+        upDown(false), downDown(false), leftDown(false), rightDown(false), triangleDown(false) {}
 
     void clearRequests() {
         dropRequested=false; resetRequested=false;
         pauseRequested=false; debugRequested=false;
-        upRequested=false; downRequested=false; backRequested=false;
+        upRequested=false; downRequested=false;
+        leftRequested=false; rightRequested=false; backRequested=false;
     }
 
     virtual bool OnEvent(SEvent e) {
@@ -59,6 +62,12 @@ public:
         case KEY_DOWN:
             if(down && !downDown) downRequested=true;
             downDown=down; return true;
+        case KEY_LEFT:
+            if(down && !leftDown) leftRequested=true;
+            leftDown=down; return true;
+        case KEY_RIGHT:
+            if(down && !rightDown) rightRequested=true;
+            rightDown=down; return true;
         case KEY_TRIANGLE:
             if(down && !triangleDown) backRequested=true;
             triangleDown=down; return true;
@@ -67,16 +76,17 @@ public:
     }
 };
 
-static tower::Vec2 suspendedPosition(float t)
+static tower::Vec2 suspendedPosition(float phase,const tower::Tuning& tuning)
 {
-    const float a=SWING_AMPLITUDE*sinf(t*SWING_RATE);
+    const float a=tuning.get(tower::Tuning::SWING_AMPLITUDE)*sinf(phase);
     return PIVOT+tower::Vec2(ROPE_LENGTH*sinf(a),-ROPE_LENGTH*cosf(a));
 }
 
-static tower::Vec2 suspendedVelocity(float t)
+static tower::Vec2 suspendedVelocity(float phase,const tower::Tuning& tuning)
 {
-    const float a=SWING_AMPLITUDE*sinf(t*SWING_RATE);
-    const float da=SWING_AMPLITUDE*SWING_RATE*cosf(t*SWING_RATE);
+    const float a=tuning.get(tower::Tuning::SWING_AMPLITUDE)*sinf(phase);
+    const float da=tuning.get(tower::Tuning::SWING_AMPLITUDE)*
+                   tuning.get(tower::Tuning::SWING_SPEED)*cosf(phase);
     return tower::Vec2(ROPE_LENGTH*cosf(a)*da,ROPE_LENGTH*sinf(a)*da);
 }
 
@@ -139,8 +149,20 @@ int engineMain(unsigned int argc,void* argv)
         0,core::vector3df(0,3.25f,-18.5f),core::vector3df(0,3.25f,0));
     (void)camera;
 
+    // The same editable text file is read at startup and saved on L release.
+    // Copy tuning.cfg next to EBOOT.PBP in the PSP game directory.
+    const char* const tuningFile="tuning.cfg";
+    tower::Tuning tuning;
+    const bool loadedTuning=tuning.load(tuningFile);
+    tower::TuningEditor tuningEditor;
+    tower::TuningOverlay tuningOverlay;
+    bool tuningHeldLastFrame=false;
+    const wchar_t* tuningStatus=loadedTuning ? L"TUNING LOADED" : L"TUNING DEFAULTS - FILE MISSING";
+    float tuningStatusSeconds=3.0f;
+
     tower::World world;
     resetWorld(world);
+    tower::applyTuning(world,tuning);
     scene::ISceneNode* nodes[tower::World::MAX_BODIES];
     for(int i=0;i<tower::World::MAX_BODIES;i++) nodes[i]=0;
     const video::SColor groundColor(255,90,100,115);
@@ -180,12 +202,14 @@ int engineMain(unsigned int argc,void* argv)
     tower::MenuFlow flow;
     tower::HudStats hudStats;
     const int stackedMetric=hudStats.addCounter(L"BOXES STACKED", world.bodyCount()-1);
+    const int scoreMetric=hudStats.addCounter(L"SCORE",0);
+    int score=0;
     tower::HudRenderer hudRenderer;
     tower::StackProgress stackProgress;
     stackProgress.reset(world.bodyCount()-1);
     tower::TowerFailureRule failureRule;
     failureRule.reset(world,1); // top of the lowest seeded 'spine' block
-    float simTime=0.0f,accumulator=0.0f,physicsMs=0.0f,menuTime=0.0f;
+    float simTime=0.0f,swingPhase=0.0f,accumulator=0.0f,physicsMs=0.0f,menuTime=0.0f;
     float fadeRemaining=0.0f;
     bool dropped=false, paused=false,showDebug=true;
     int droppedSteps=0,stepsThisFrame=0;
@@ -197,6 +221,31 @@ int engineMain(unsigned int argc,void* argv)
         float frameSeconds=(now-previous)*0.001f;
         previous=now;
         if(frameSeconds>0.08f) frameSeconds=0.08f; // suspend/frame stall guard
+
+        // Read L state directly: LTE's KEY_LBUTTON PSP event lacks a
+        // reliable PressedDown assignment in its trigger branch.
+        SceCtrlData pad;
+        sceCtrlPeekBufferPositive(&pad,1);
+        const bool editing=((pad.Buttons & PSP_CTRL_LTRIGGER)!=0) &&
+                           flow.screen()!=tower::MenuFlow::MAIN_MENU;
+        if(editing) {
+            if(input.upRequested) tuningEditor.up();
+            if(input.downRequested) tuningEditor.down();
+            if(input.leftRequested) tuningEditor.change(tuning,-1);
+            if(input.rightRequested) tuningEditor.change(tuning,1);
+            // Keep the simulation live, but consume gameplay actions.
+            input.clearRequests();
+        }
+        if(tuningHeldLastFrame && !editing) {
+            const bool saved=tuning.save(tuningFile);
+            tuningStatus=saved ? L"TUNING SAVED" : L"SAVE FAILED - CHECK GAME FOLDER";
+            tuningStatusSeconds=3.5f;
+        }
+        tuningHeldLastFrame=editing;
+        if(tuningStatusSeconds>0.0f) {
+            tuningStatusSeconds-=frameSeconds;
+            if(tuningStatusSeconds<0.0f) tuningStatusSeconds=0.0f;
+        }
 
         if(flow.screen()==tower::MenuFlow::MAIN_MENU) {
             menuTime+=frameSeconds; // simple visual animation, no physics tick
@@ -211,10 +260,12 @@ int engineMain(unsigned int argc,void* argv)
                 // Entering Play always starts a fresh sandbox. Crucially, consume
                 // the confirming Cross press so it cannot drop the swinging block.
                 resetWorld(world);
+                tower::applyTuning(world,tuning);
                 stackProgress.reset(world.bodyCount()-1);
                 failureRule.reset(world,1);
                 hudStats.setValue(stackedMetric,stackProgress.stackedCount());
-                dropped=false; paused=false; simTime=0.0f;
+                score=0; hudStats.setValue(scoreMetric,score);
+                dropped=false; paused=false; simTime=0.0f; swingPhase=0.0f;
                 accumulator=0.0f; physicsMs=0.0f; droppedSteps=0;
                 frameSeconds=0.0f;
                 fadeRemaining=0.25f;
@@ -240,17 +291,19 @@ int engineMain(unsigned int argc,void* argv)
             } else if(input.dropRequested || input.resetRequested) {
                 flow.retry();
                 resetWorld(world);
+                tower::applyTuning(world,tuning);
                 stackProgress.reset(world.bodyCount()-1);
                 failureRule.reset(world,1);
                 hudStats.setValue(stackedMetric,stackProgress.stackedCount());
-                dropped=false; paused=false; simTime=0.0f;
+                score=0; hudStats.setValue(scoreMetric,score);
+                dropped=false; paused=false; simTime=0.0f; swingPhase=0.0f;
                 physicsMs=0.0f; accumulator=0.0f; droppedSteps=0;
                 frameSeconds=0.0f; fadeRemaining=0.25f;
                 for(int i=0;i<world.bodyCount();i++)
                     if(nodes[i]) nodes[i]->setVisible(true);
                 if(nodes[4]) nodes[4]->setVisible(false);
                 hanging->setVisible(true);
-                hangingBody.position=suspendedPosition(simTime);
+                hangingBody.position=suspendedPosition(swingPhase,tuning);
                 hangingBody.angle=0.0f;
                 updateNode(hanging,hangingBody);
             }
@@ -269,11 +322,13 @@ int engineMain(unsigned int argc,void* argv)
             } else {
                 if(input.resetRequested) {
                     resetWorld(world);
+                    tower::applyTuning(world,tuning);
                     stackProgress.reset(world.bodyCount()-1);
                     failureRule.reset(world,1);
                     hudStats.setValue(stackedMetric,stackProgress.stackedCount());
+                    score=0; hudStats.setValue(scoreMetric,score);
                     dropped=false; paused=false;
-                    simTime=0.0f; accumulator=0.0f; droppedSteps=0;
+                    simTime=0.0f; swingPhase=0.0f; accumulator=0.0f; droppedSteps=0;
                     physicsMs=0.0f; frameSeconds=0.0f;
                     if(nodes[4]) nodes[4]->setVisible(false);
                     hanging->setVisible(true);
@@ -287,8 +342,8 @@ int engineMain(unsigned int argc,void* argv)
                 if(!paused) {
                     if(input.dropRequested && !dropped) {
                         tower::Body b=tower::Body::box(1.6f,1.0f,1.2f,0.0f,0.0f);
-                        b.position=suspendedPosition(simTime);
-                        b.velocity=suspendedVelocity(simTime);
+                        b.position=suspendedPosition(swingPhase,tuning);
+                        b.velocity=suspendedVelocity(swingPhase,tuning);
                         const int index=world.addBody(b);
                         if(index>=0) {
                             if(!nodes[index])
@@ -302,7 +357,9 @@ int engineMain(unsigned int argc,void* argv)
                     accumulator+=frameSeconds;
                     const u32 physicsStart=sceKernelGetSystemTimeLow();
                     while(accumulator>=STEP && stepsThisFrame<4) {
+                        tower::applyTuning(world,tuning);
                         world.step(STEP);
+                        swingPhase+=STEP*tuning.get(tower::Tuning::SWING_SPEED);
                         simTime+=STEP;
                         accumulator-=STEP;
                         ++stepsThisFrame;
@@ -314,7 +371,14 @@ int engineMain(unsigned int argc,void* argv)
                             accumulator=0.0f;
                             break;
                         }
+                        stackProgress.setRequiredSettlingTime(tuning.get(tower::Tuning::SETTLING_TIME));
+                        const int beforeStacking=stackProgress.stackedCount();
                         stackProgress.step(world,STEP);
+                        const int newlyStacked=stackProgress.stackedCount()-beforeStacking;
+                        if(newlyStacked>0) {
+                            score+=newlyStacked*tuning.getInt(tower::Tuning::SCORE_PER_BLOCK);
+                            hudStats.setValue(scoreMetric,score);
+                        }
                         hudStats.setValue(stackedMetric,stackProgress.stackedCount());
                     }
                     const u32 physicsEnd=sceKernelGetSystemTimeLow();
@@ -328,7 +392,7 @@ int engineMain(unsigned int argc,void* argv)
                 for(int i=0;i<world.bodyCount();i++)
                     updateNode(nodes[i],world.body(i));
                 if(!dropped) {
-                    hangingBody.position=suspendedPosition(simTime);
+                    hangingBody.position=suspendedPosition(swingPhase,tuning);
                     hangingBody.angle=0.0f;
                     updateNode(hanging,hangingBody);
                 }
@@ -336,7 +400,7 @@ int engineMain(unsigned int argc,void* argv)
         }
 
         const bool inMenu=flow.screen()==tower::MenuFlow::MAIN_MENU;
-        tower::Vec2 swing=suspendedPosition(simTime);
+        tower::Vec2 swing=suspendedPosition(swingPhase,tuning);
         float menuAngle=0.0f;
         if(inMenu) {
             menuAngle=0.50f*sinf(menuTime*1.7f);
@@ -420,7 +484,7 @@ int engineMain(unsigned int argc,void* argv)
             hudRenderer.draw(driver,font,hudStats);
             driver->draw2DRectangle(video::SColor(175,15,22,35),
                                     core::rect<s32>(0,0,480,28));
-            font->draw(L"X: DROP  O: RESET  START: PAUSE  TRIANGLE: MENU",
+            font->draw(L"X: DROP O: RESET START: PAUSE TRIANGLE: MENU L: TUNE",
                        core::rect<s32>(7,7,478,26),
                        video::SColor(255,255,255,255));
             if(showDebug) {
@@ -467,6 +531,16 @@ int engineMain(unsigned int argc,void* argv)
                            core::rect<s32>(113,175,399,197),
                            video::SColor(255,255,209,143));
             }
+        }
+
+        // Always draw tuning above the normal game/game-over HUD.
+        if(editing) {
+            tuningOverlay.draw(driver,font,tuning,tuningEditor);
+        } else if(!inMenu && tuningStatusSeconds>0.0f && font) {
+            driver->draw2DRectangle(video::SColor(220,15,30,48),
+                                    core::rect<s32>(90,216,391,240));
+            font->draw(tuningStatus,core::rect<s32>(105,222,390,239),
+                       video::SColor(255,255,211,135));
         }
 
         if(fadeRemaining>0.0f) {
