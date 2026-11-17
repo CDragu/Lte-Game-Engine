@@ -16,10 +16,18 @@ void Weather::reset()
 }
 void Weather::configure(float strength,float gust,float period)
 {
-    if(strength>=0 && strength<=6.0f) strength_=strength;
-    if(gust>=0 && gust<=1.0f) gust_=gust;
-    if(period>=4.0f && period<=40.0f) period_=period;
-    recalculate(0.0f); // changes in live tuning take effect without a time jump
+    float newStrength=strength_, newGust=gust_, newPeriod=period_;
+    if(strength>=0 && strength<=6.0f) newStrength=strength;
+    if(gust>=0 && gust<=1.0f) newGust=gust;
+    if(period>=4.0f && period<=40.0f) newPeriod=period;
+    if(newStrength!=strength_ || newGust!=gust_ || newPeriod!=period_) {
+        strength_=newStrength;
+        gust_=newGust;
+        period_=newPeriod;
+        // Recompute only when tuning actually changes: the render loop
+        // calls configure every frame and must not erase the 60 Hz gust rate.
+        recalculate(0.0f);
+    }
 }
 void Weather::step(float dt)
 {
