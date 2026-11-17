@@ -52,10 +52,12 @@ int Weather::direction() const
 Weather::Severity Weather::severity() const
 {
     if(direction()==0) return CALM;
-    const float value=fraction();
-    if(value<0.28f) return BREEZE;
-    if(value<0.50f) return WINDY;
-    if(value<0.74f) return STRONG;
+    // Classification uses absolute in-game wind acceleration, not percent
+    // of the tunable maximum. Weak settings must not be labelled "GALE".
+    const float force=absWind(x_);
+    if(force<0.65f) return BREEZE;
+    if(force<1.35f) return WINDY;
+    if(force<2.50f) return STRONG;
     return GALE;
 }
 const wchar_t* Weather::severityLabel(Severity s)
