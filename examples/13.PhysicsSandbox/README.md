@@ -78,7 +78,7 @@ cd examples/13.PhysicsSandbox/tests
 make test
 ```
 
-Native tests cover free fall, floor contact and rest, three-box stacking, off-center impact rotation, fixed-step repeatability, menu/navigation/game-over/retry transitions, HUD counters/stack detection, loss-plane conditions and tuning file read/write + live physics bindings. GitHub Actions runs all six suites on changes to the sandbox.
+Native tests cover free fall, floor contact and rest, three-box stacking, off-center impact rotation, fixed-step repeatability, menu/navigation/game-over/retry transitions, HUD counters/stack detection, loss-plane conditions and tuning file read/write + live physics bindings. GitHub Actions runs all seven suites on changes to the sandbox. The seventh suite compiles and exercises the PSP audio callback adapter using native stubs (it does not replace a PSP build).
 
 ## Architecture
 
@@ -96,7 +96,7 @@ Native tests cover free fall, floor contact and rest, three-box stacking, off-ce
 - `GameSounds.h/.cpp`: PSP/LTE audio callback adapter.
 - `tuning.cfg`: editable defaults file shipped alongside EBOOT.PBP.
 - `MenuFlow.h`: standalone, dependency-free menu state and navigation.
-- `tests/physics_tests.cpp`, `tests/menu_tests.cpp`, `tests/hud_tests.cpp`, `tests/failure_tests.cpp` `tests/tuning_tests.cpp` and `tests/sound_tests.cpp`: native regression tests.
+- `tests/physics_tests.cpp`, `tests/menu_tests.cpp`, `tests/hud_tests.cpp`, `tests/failure_tests.cpp` `tests/tuning_tests.cpp`, `tests/sound_tests.cpp` and `tests/audio_backend_tests.cpp`: native regression tests.
 
 ### Known limitations / validation needs
 
