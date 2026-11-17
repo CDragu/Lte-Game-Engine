@@ -38,7 +38,7 @@ World::Contact::Contact() : ia(-1),ib(-1),count(0),normal(),penetration(0.0f)
 }
 
 World::World() { reset(); }
-void World::reset() { count_=contacts_=pairs_=0; }
+void World::reset() { count_=contacts_=pairs_=manifoldCount_=0; }
 
 int World::addBody(const Body& body)
 {
@@ -191,6 +191,20 @@ void World::solve(Contact& c)
     }
 }
 
+bool World::isSupportedBy(int upperBody, int lowerBody) const
+{
+    if (upperBody<0 || lowerBody<0 || upperBody>=count_ ||
+        lowerBody>=count_ || upperBody==lowerBody) return false;
+    for(int m=0;m<manifoldCount_;m++) {
+        const Contact& c=manifolds_[m];
+        if(c.ia==lowerBody && c.ib==upperBody && c.normal.y>0.55f)
+            return true;
+        if(c.ib==lowerBody && c.ia==upperBody && c.normal.y< -0.55f)
+            return true;
+    }
+    return false;
+}
+
 void World::step(float dt)
 {
     // Caller is responsible for a fixed time step; reject bad inputs.
@@ -207,21 +221,21 @@ void World::step(float dt)
     }
 
     contacts_=pairs_=0;
-    int manifoldCount=0;
+    manifoldCount_=0;
     for(int i=0;i<count_;i++)
         for(int j=i+1;j<count_;j++) {
             if(!bodies_[i].isDynamic() && !bodies_[j].isDynamic()) continue;
             ++pairs_;
-            if(manifoldCount>=MAX_MANIFOLDS) continue;
+            if(manifoldCount_>=MAX_MANIFOLDS) continue;
             Contact c;
             if(collide(i,j,c)) {
-                manifolds_[manifoldCount++]=c;
+                manifolds_[manifoldCount_++]=c;
                 contacts_+=c.count;
             }
         }
 
     for(int iteration=0;iteration<SOLVER_ITERATIONS;iteration++)
-        for(int m=0;m<manifoldCount;m++) solve(manifolds_[m]);
+        for(int m=0;m<manifoldCount_;m++) solve(manifolds_[m]);
 
     // Baumgarte-style penetration correction; static boxes stay fixed.
     // This simple solver is intended for a handful of blocks, not a large tower.

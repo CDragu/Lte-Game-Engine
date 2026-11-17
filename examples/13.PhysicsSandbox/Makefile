@@ -1,5 +1,5 @@
 TARGET = PhysicsSandbox
-OBJS = main.o Physics2D.o
+OBJS = main.o Physics2D.o HudRenderer.o
 
 INCDIR = -I ../../include/
 CFLAGS = -G0 -O2
