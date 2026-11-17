@@ -30,6 +30,12 @@ int main() {
         }
         check(same && highest>0.7f,"deterministic gusts stay within configured strength");
         check(seenLeft && seenRight,"wind direction reverses over time");
+        Weather light,gale;
+        light.configure(0.5f,0.0f,14.0f);
+        gale.configure(6.0f,0.0f,14.0f);
+        check(light.severity()==Weather::BREEZE &&
+              gale.severity()==Weather::GALE,
+              "weather severity uses absolute force rather than cap percentage");
         a.reset();b.reset();
         check(absolute(a.accelerationX()-b.accelerationX())<0.00001f,
               "restart resets deterministic weather phase");

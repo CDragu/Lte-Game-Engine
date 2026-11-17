@@ -36,6 +36,18 @@ Tweakable names: `gravity`, `friction`, `restitution`, `linear_damping`, `angula
 
 This is a developer feature. For release, **package the tuned file alongside the EBOOT** or later generate baked-in defaults from the tuned `tuning.cfg`. Live settings are applied in real time while the simulation runs; the game can still fail while tuning.
 
+## Wind weather system (PSP gameplay)
+
+The sandbox now features **deterministic dynamic wind**, not a real-world weather forecast. During each **60 Hz fixed physics step**, a slowly changing crosswind reverses between left and right and varies with gusts. The solver applies a horizontal push to the exposed face of each dynamic cuboid **and an angular torque**, so wind can rock and move the active stack. The pre-release pendulum also leans into the current wind and retains that motion when released. Static ground remains unaffected. Weather time is frozen while paused, on the main menu, or after game over; retry/Play resets the wind pattern so test runs are repeatable.
+
+**Bottom-left weather icon:** an always-visible wind-streak symbol, direction as `<<` / `>>` (or `--` when calm), percentage of the currently configured maximum wind force, and a severity label: **CALM / BREEZE / WINDY / STRONG / GALE**. The severity classification is based on *absolute* wind force, so low-force weather cannot be labelled a gale just because it is near its configured maximum. Colours progress from cool blue to orange/red with intensity. The panel sits below the main HUD.
+
+**3D direction arrow:** three real **volumetric cube scene nodes** (shaft + two arrowhead arms), located to the left of the tower. The arrow points in the direction the wind pushes blocks (not the direction it came from). Its length and colour respond to strength; in still air the arrow disappears. Both indicators use the same `Weather` instance that drives physics, so the visuals cannot disagree with the simulation.
+
+**Developer variables:** in the existing hold-L live-tuning menu, scroll down to `WIND FORCE`, `GUSTS` and `WIND CYCLE` (seconds). These are saved in the same `tuning.cfg` used on boot. The tuning overlay paginates automatically, eight entries per page, to fit the PSP's 480×272 screen. Defaults: `wind_strength=1.300`, `wind_gustiness=0.400`, `wind_cycle=14.000`. Setting wind force to zero creates calm conditions; changing the other parameters affects the ongoing weather without restarting the round.
+
+**Note:** Wind strength is deliberately an *arcade acceleration parameter*, not a real m/s or km/h measurement. Collision stability and tuning need verification on PSP/PPSSPP, particularly at high wind settings. This is a wind-focused first version of weather; rain, temperature, and other weather effects are not yet implemented.
+
 ## Sound effects (original procedural SFX)
 
 The PSP sandbox now has original short synthesized sound effects: **menu move, menu select, menu/back, block release, first impact, successful stack, game-over, pause/resume, tuning changes and tuning saved**.
@@ -78,7 +90,7 @@ cd examples/13.PhysicsSandbox/tests
 make test
 ```
 
-Native tests cover free fall, floor contact and rest, three-box stacking, off-center impact rotation, fixed-step repeatability, menu/navigation/game-over/retry transitions, HUD counters/stack detection, loss-plane conditions and tuning file read/write + live physics bindings. GitHub Actions runs all seven suites on changes to the sandbox. The seventh suite compiles and exercises the PSP audio callback adapter using native stubs (it does not replace a PSP build).
+Native tests cover free fall, floor contact and rest, three-box stacking, off-center impact rotation, fixed-step repeatability, menu/navigation/game-over/retry transitions, HUD counters/stack detection, loss-plane conditions and tuning file read/write + live physics bindings. GitHub Actions runs all eight suites on changes to the sandbox. The audio suite compiles and exercises the PSP audio callback adapter using native stubs; the weather suite tests deterministic gusts, wind reversal, tuning, and force/torque applied to dynamic blocks. Native tests do not replace a PSP build.
 
 ## Architecture
 
@@ -93,10 +105,12 @@ Native tests cover free fall, floor contact and rest, three-box stacking, off-ce
 - `TuningOverlay.h/.cpp`: LTE-only held-L settings panel.
 - `SoundSynth.h/.cpp`: deterministic original mono audio effect generation.
 - `SoundCues.h`: one-shot impact event gating.
+- `Weather.h/.cpp`: deterministic PSP-independent wind model and strength categories.
+- `WeatherView.h/.cpp`: bottom-left weather HUD plus moving 3D arrow scene nodes.
 - `GameSounds.h/.cpp`: PSP/LTE audio callback adapter.
 - `tuning.cfg`: editable defaults file shipped alongside EBOOT.PBP.
 - `MenuFlow.h`: standalone, dependency-free menu state and navigation.
-- `tests/physics_tests.cpp`, `tests/menu_tests.cpp`, `tests/hud_tests.cpp`, `tests/failure_tests.cpp` `tests/tuning_tests.cpp`, `tests/sound_tests.cpp` and `tests/audio_backend_tests.cpp`: native regression tests.
+- `tests/physics_tests.cpp`, `tests/menu_tests.cpp`, `tests/hud_tests.cpp`, `tests/failure_tests.cpp` `tests/tuning_tests.cpp`, `tests/sound_tests.cpp`, `tests/audio_backend_tests.cpp` and `tests/weather_tests.cpp`: native regression tests.
 
 ### Known limitations / validation needs
 
@@ -105,7 +119,7 @@ Native tests cover free fall, floor contact and rest, three-box stacking, off-ce
 - Ground is static; the lower-level kinematic sway and promotion/freeze logic from the GDD are **not yet implemented**.
 - Real PSP performance and PSP build compatibility **have not been verified**. The host test suite does not prove PSP execution.
 - Press Circle to reset after one release, or Triangle to return to the main menu; on GAME OVER press Cross/Circle to retry. Rendering uses the engine's normal camera and backend; monitor frame timing because 60 FPS is aspirational until measured.
-- The menu/HUD/tuning overlay use built-in shapes and fonts. PSP execution, rendering, config path resolution and file write permissions still need verification on hardware or PPSSPP.
+- The menu/HUD/tuning overlay/weather view use built-in shapes and fonts. PSP execution, rendering, config path resolution and file write permissions still need verification on hardware or PPSSPP.
 
 ## Next step
 
