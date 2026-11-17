@@ -198,6 +198,14 @@ void World::solve(Contact& c)
     }
 }
 
+bool World::hasContact(int index) const
+{
+    if(index<0 || index>=count_) return false;
+    for(int i=0;i<manifoldCount_;++i)
+        if(manifolds_[i].ia==index || manifolds_[i].ib==index) return true;
+    return false;
+}
+
 bool World::isSupportedBy(int upperBody, int lowerBody) const
 {
     if (upperBody<0 || lowerBody<0 || upperBody>=count_ ||
