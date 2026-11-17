@@ -24,6 +24,18 @@ After each 60 Hz physics step, `TowerFailureRule.h` checks the **center height**
 
 The GAME OVER overlay reports the failure, retains the current stacked-box counter, and offers **Cross or Circle to retry** (resetting physics + HUD counters) or **Triangle to return to the main menu**. The debug HUD displays the failure height as a red horizontal line; Select toggles this alongside the debug overlay.
 
+## Live tuning (development feature)
+
+**Hold PSP Left Trigger (L)** while playing or on the Game Over screen to show the live tuning overlay. Use **D-pad Up/Down** to select an entry and **Left/Right** to change the highlighted value. Buttons controlling drops, pause, retry and navigation are ignored while L is held. **Release L** to save the values automatically; an on-screen status says **TUNING SAVED** or **SAVE FAILED - CHECK GAME FOLDER**.
+
+**Configuration:** `tuning.cfg` is loaded once at boot, and the *exact same relative path* is written when L is released, using normal file I/O. The sample config is version-controlled at `examples/13.PhysicsSandbox/tuning.cfg`. **When copying `EBOOT.PBP` to the PSP/PPSSPP game folder, copy `tuning.cfg` into that same folder.** The path is interpreted relative to the game's **current working directory**; PSP launchers that set a different working directory may require changing `tuningFile` in `main.cpp` to an explicit writable Memory Stick path. If the file is absent, compiled-in defaults are used and release of L attempts to create the file. Saving errors are shown rather than silently ignored. The saved file remains human-readable, ready to commit to Git.
+
+**Changes take effect in-game:** physics gravity, block friction/restitution, linear/angular damping update on the next 60 Hz step. Pendulum amplitude and rate change live; swing phase is integrated to avoid jumping when speed changes. Settling time changes the duration needed for a dropped block to be credited, and **SCORE** now awards configured points per newly stacked block. The existing initial three blocks start the stack counter at 3, but do not grant score. The score and simulation reset when restarting; the tuning values don't.
+
+Tweakable names: `gravity`, `friction`, `restitution`, `linear_damping`, `angular_damping`, `swing_amplitude`, `swing_speed`, `settling_time`, `score_per_block`. `Tuning.h/.cpp` contains the registry, allowed ranges, steps and plain-text parser. Add a registry entry and consumer for future variables; `TuningOverlay` renders all registered entries automatically.
+
+This is a developer feature. For release, **package the tuned file alongside the EBOOT** or later generate baked-in defaults from the tuned `tuning.cfg`. Live settings are applied in real time while the simulation runs; the game can still fail while tuning.
+
 ## What works in source
 
 - Visible 3D cube nodes, a static ground cuboid and **three initially dynamic stacked rectangles** (2.5D rigid bodies).
@@ -56,7 +68,7 @@ cd examples/13.PhysicsSandbox/tests
 make test
 ```
 
-Native tests cover free fall, floor contact and rest, three-box stacking, off-center impact rotation, fixed-step repeatability, menu/navigation/game-over/retry transitions, HUD counters/stack detection, and loss-plane conditions. GitHub Actions runs all four suites on changes to the sandbox.
+Native tests cover free fall, floor contact and rest, three-box stacking, off-center impact rotation, fixed-step repeatability, menu/navigation/game-over/retry transitions, HUD counters/stack detection, loss-plane conditions and tuning file read/write + live physics bindings. GitHub Actions runs all five suites on changes to the sandbox.
 
 ## Architecture
 
@@ -66,8 +78,12 @@ Native tests cover free fall, floor contact and rest, three-box stacking, off-ce
 - `HudRenderer.h/.cpp`: PSP/LTE tile renderer for all registered metrics.
 - `StackProgress.h`: counts only settled, tower-supported dropped cuboids.
 - `TowerFailureRule.h`: native-testable foundation-plane loss rule.
+- `Tuning.h/.cpp`: testable parameter registry and plain-text persistence.
+- `TuningPhysics.h`: native-testable bridge for applying settings to the rigid-body world.
+- `TuningOverlay.h/.cpp`: LTE-only held-L settings panel.
+- `tuning.cfg`: editable defaults file shipped alongside EBOOT.PBP.
 - `MenuFlow.h`: standalone, dependency-free menu state and navigation.
-- `tests/physics_tests.cpp`, `tests/menu_tests.cpp`, `tests/hud_tests.cpp`, and `tests/failure_tests.cpp`: native regression tests.
+- `tests/physics_tests.cpp`, `tests/menu_tests.cpp`, `tests/hud_tests.cpp`, `tests/failure_tests.cpp` and `tests/tuning_tests.cpp`: native regression tests.
 
 ### Known limitations / validation needs
 
@@ -76,7 +92,7 @@ Native tests cover free fall, floor contact and rest, three-box stacking, off-ce
 - Ground is static; the lower-level kinematic sway and promotion/freeze logic from the GDD are **not yet implemented**.
 - Real PSP performance and PSP build compatibility **have not been verified**. The host test suite does not prove PSP execution.
 - Press Circle to reset after one release, or Triangle to return to the main menu; on GAME OVER press Cross/Circle to retry. Rendering uses the engine's normal camera and backend; monitor frame timing because 60 FPS is aspirational until measured.
-- The menu/HUD are implemented with built-in cubes and the built-in font, so they load without external artwork. The PSP-facing scene/menu/HUD rendering has not been run on hardware or PPSSPP.
+- The menu/HUD/tuning overlay use built-in shapes and fonts. PSP execution, rendering, config path resolution and file write permissions still need verification on hardware or PPSSPP.
 
 ## Next step
 
