@@ -44,6 +44,9 @@ public:
     int bodyCount() const { return count_; }
     int contactCount() const { return contacts_; } // count of contact points last step
     int pairCount() const { return pairs_; }
+    // True when the last physics step reported a support normal pointing
+    // from lower to upper. Ground contact alone is not a successful stack.
+    bool isSupportedBy(int upperBody, int lowerBody) const;
     void step(float dt); // must be called with dt = 1/60 for the prototype
 
 private:
@@ -59,7 +62,7 @@ private:
     };
     Body bodies_[MAX_BODIES];
     Contact manifolds_[MAX_MANIFOLDS];
-    int count_, contacts_, pairs_;
+    int count_, contacts_, pairs_, manifoldCount_;
     bool collide(int ia, int ib, Contact& contact) const;
     void solve(Contact& contact);
 };

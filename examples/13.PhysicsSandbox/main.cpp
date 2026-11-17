@@ -4,6 +4,9 @@
 #include <math.h>
 #include "Physics2D.h"
 #include "MenuFlow.h"
+#include "HudStats.h"
+#include "HudRenderer.h"
+#include "StackProgress.h"
 #include "../common.h"
 
 using namespace engine;
@@ -174,6 +177,11 @@ int engineMain(unsigned int argc,void* argv)
     hanging->setVisible(false);
 
     tower::MenuFlow flow;
+    tower::HudStats hudStats;
+    const int stackedMetric=hudStats.addCounter(L"BOXES STACKED", world.bodyCount()-1);
+    tower::HudRenderer hudRenderer;
+    tower::StackProgress stackProgress;
+    stackProgress.reset(world.bodyCount()-1);
     float simTime=0.0f,accumulator=0.0f,physicsMs=0.0f,menuTime=0.0f;
     float fadeRemaining=0.0f;
     bool dropped=false, paused=false,showDebug=true;
@@ -200,6 +208,8 @@ int engineMain(unsigned int argc,void* argv)
                 // Entering Play always starts a fresh sandbox. Crucially, consume
                 // the confirming Cross press so it cannot drop the swinging block.
                 resetWorld(world);
+                stackProgress.reset(world.bodyCount()-1);
+                hudStats.setValue(stackedMetric,stackProgress.stackedCount());
                 dropped=false; paused=false; simTime=0.0f;
                 accumulator=0.0f; physicsMs=0.0f; droppedSteps=0;
                 frameSeconds=0.0f;
@@ -226,6 +236,8 @@ int engineMain(unsigned int argc,void* argv)
             } else {
                 if(input.resetRequested) {
                     resetWorld(world);
+                    stackProgress.reset(world.bodyCount()-1);
+                    hudStats.setValue(stackedMetric,stackProgress.stackedCount());
                     dropped=false; paused=false;
                     simTime=0.0f; accumulator=0.0f; droppedSteps=0;
                     physicsMs=0.0f; frameSeconds=0.0f;
@@ -248,6 +260,7 @@ int engineMain(unsigned int argc,void* argv)
                             if(!nodes[index])
                                 nodes[index]=createBox(smgr,b,blockColors[3]);
                             if(nodes[index]) nodes[index]->setVisible(true);
+                            stackProgress.beginDrop(index);
                             dropped=true;
                             hanging->setVisible(false);
                         }
@@ -256,6 +269,8 @@ int engineMain(unsigned int argc,void* argv)
                     const u32 physicsStart=sceKernelGetSystemTimeLow();
                     while(accumulator>=STEP && stepsThisFrame<4) {
                         world.step(STEP);
+                        stackProgress.step(world,STEP);
+                        hudStats.setValue(stackedMetric,stackProgress.stackedCount());
                         simTime+=STEP;
                         accumulator-=STEP;
                         ++stepsThisFrame;
@@ -349,6 +364,7 @@ int engineMain(unsigned int argc,void* argv)
                     video::SColor(255,209,222,237));
             }
         } else if(font) {
+            hudRenderer.draw(driver,font,hudStats);
             driver->draw2DRectangle(video::SColor(175,15,22,35),
                                     core::rect<s32>(0,0,480,28));
             font->draw(L"X: DROP  O: RESET  START: PAUSE  TRIANGLE: MENU",
