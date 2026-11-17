@@ -16,6 +16,14 @@ The HUD is deliberately separated into `HudStats.h` (C++98 data model for up to 
 
 This counter measures **cumulative successful tower placements**, including the three seeded blocks; it does not decrease when blocks later topple. The sandbox still supports only one dropped block per run.
 
+## Loss condition and game-over flow
+
+The **top surface of the first (lowest) seeded tower block** is the failure reference plane (approximately `Y=1.02` with the current sample dimensions). This is the prototype's **spine/foundation plane**: the future spline-frozen foundation is *not yet implemented*. The plane is set at the beginning of each round and remains fixed for that round.
+
+After each 60 Hz physics step, `TowerFailureRule.h` checks the **center height** of every dynamic block above that foundation block. If any center falls below the reference plane (with a 0.01 unit tolerance), the screen changes to **GAME OVER** and the simulation freezes. The foundation block itself is exempt, since its center naturally starts below its own top surface. This detects missed releases even when a box lands on the static ground, as well as an upper tower block falling off.
+
+The GAME OVER overlay reports the failure, retains the current stacked-box counter, and offers **Cross or Circle to retry** (resetting physics + HUD counters) or **Triangle to return to the main menu**. The debug HUD displays the failure height as a red horizontal line; Select toggles this alongside the debug overlay.
+
 ## What works in source
 
 - Visible 3D cube nodes, a static ground cuboid and **three initially dynamic stacked rectangles** (2.5D rigid bodies).
@@ -25,7 +33,7 @@ This counter measures **cumulative successful tower placements**, including the 
 - A **persistent gameplay counter** displays boxes successfully stacked. Separately, the existing Select-toggle debug telemetry displays LTE-reported FPS, time spent in physics per rendered frame in milliseconds (PSP microsecond clock), contact-point count, active body count, per-frame physics steps, and missed simulation steps.
 - Main menu: D-pad Up/Down = choose Play/Exit, Cross = confirm. In game: Cross = drop once, Circle = reset scene for another drop, Start = pause, Select = toggle HUD, Triangle = return to menu. The device cursor is hidden so PSP face buttons are interpreted as key events.
 
-**This is a one-drop physics test, not yet the complete endless stacking game.** It deliberately starts with three dynamic blocks and permits one more released block. Repeated spawning, lower-tower freeze, sway spline, camera tracking, scoring and collapse detection are later milestones. Physics bodies do not bend; the intended frozen foundation spline is not implemented here.
+**This is a one-drop physics test, not yet the complete endless stacking game.** It deliberately starts with three dynamic blocks and permits one more released block. Repeated spawning, lower-tower freeze, sway spline, camera tracking, scoring and more advanced collapse detection are later milestones. Physics bodies do not bend; the intended frozen foundation spline is not implemented here.
 
 ## PSP build
 
@@ -48,7 +56,7 @@ cd examples/13.PhysicsSandbox/tests
 make test
 ```
 
-Native tests cover free fall, floor contact and rest, three-box stacking, off-center impact rotation, fixed-step repeatability, menu state/navigation/exit logic, and the HUD counter/stack detection logic. GitHub Actions runs all three suites on changes to the sandbox.
+Native tests cover free fall, floor contact and rest, three-box stacking, off-center impact rotation, fixed-step repeatability, menu/navigation/game-over/retry transitions, HUD counters/stack detection, and loss-plane conditions. GitHub Actions runs all four suites on changes to the sandbox.
 
 ## Architecture
 
@@ -57,8 +65,9 @@ Native tests cover free fall, floor contact and rest, three-box stacking, off-ce
 - `HudStats.h`: independent HUD metric registry.
 - `HudRenderer.h/.cpp`: PSP/LTE tile renderer for all registered metrics.
 - `StackProgress.h`: counts only settled, tower-supported dropped cuboids.
+- `TowerFailureRule.h`: native-testable foundation-plane loss rule.
 - `MenuFlow.h`: standalone, dependency-free menu state and navigation.
-- `tests/physics_tests.cpp`, `tests/menu_tests.cpp` and `tests/hud_tests.cpp`: native regression tests.
+- `tests/physics_tests.cpp`, `tests/menu_tests.cpp`, `tests/hud_tests.cpp`, and `tests/failure_tests.cpp`: native regression tests.
 
 ### Known limitations / validation needs
 
@@ -66,7 +75,7 @@ Native tests cover free fall, floor contact and rest, three-box stacking, off-ce
 - Simulation is planar (x, y, angle about z), rendered with LTE cube scene nodes. It is not true 3D physics.
 - Ground is static; the lower-level kinematic sway and promotion/freeze logic from the GDD are **not yet implemented**.
 - Real PSP performance and PSP build compatibility **have not been verified**. The host test suite does not prove PSP execution.
-- Press Circle to reset after one release, or Triangle to return to the main menu. Rendering uses the engine's normal camera and backend; monitor frame timing because 60 FPS is aspirational until measured.
+- Press Circle to reset after one release, or Triangle to return to the main menu; on GAME OVER press Cross/Circle to retry. Rendering uses the engine's normal camera and backend; monitor frame timing because 60 FPS is aspirational until measured.
 - The menu/HUD are implemented with built-in cubes and the built-in font, so they load without external artwork. The PSP-facing scene/menu/HUD rendering has not been run on hardware or PPSSPP.
 
 ## Next step
