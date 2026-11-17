@@ -16,7 +16,7 @@ int main() {
     const char* path="tuning_test_output.cfg";
     {
         Tuning t;
-        check(Tuning::FIELD_COUNT==9,"9 tweakable fields registered");
+        check(Tuning::FIELD_COUNT==12,"12 tweakable fields registered");
         check(closeTo(t.get(Tuning::GRAVITY),12.0f) &&
               closeTo(t.get(Tuning::SETTLING_TIME),0.35f) &&
               t.getInt(Tuning::SCORE_PER_BLOCK)==100,"expected startup defaults");
@@ -31,7 +31,12 @@ int main() {
         for(int i=0;i<100;i++) editor.down();
         check(editor.selected()==Tuning::FIELD_COUNT-1,"editor clamps last row");
         editor.change(t,1);
-        check(t.getInt(Tuning::SCORE_PER_BLOCK)==110,"integer scoring uses steps");
+        check(closeTo(t.get(Tuning::WIND_CYCLE),15.0f),"weather timing editable");
+        check(t.set(Tuning::SCORE_PER_BLOCK,110.0f) &&
+              t.getInt(Tuning::SCORE_PER_BLOCK)==110,
+              "integer scoring uses steps");
+        check(t.set(Tuning::WIND_STRENGTH,2.2f),"wind force is configurable");
+        check(t.set(Tuning::WIND_GUSTINESS,0.65f),"wind gustiness is configurable");
         check(!t.set(Tuning::GRAVITY,-100.0f) &&
               !t.set(Tuning::GRAVITY,1.0f/0.0f),"invalid values rejected");
         check(t.save(path),"writes configuration file");
@@ -41,7 +46,10 @@ int main() {
         check(reloaded.load(path),"reads the same configuration file");
         check(closeTo(reloaded.get(Tuning::GRAVITY),11.5f) &&
               closeTo(reloaded.get(Tuning::FRICTION),0.83f) &&
-              reloaded.getInt(Tuning::SCORE_PER_BLOCK)==110,
+              reloaded.getInt(Tuning::SCORE_PER_BLOCK)==110 &&
+              closeTo(reloaded.get(Tuning::WIND_CYCLE),15.0f) &&
+              closeTo(reloaded.get(Tuning::WIND_STRENGTH),2.2f) &&
+              closeTo(reloaded.get(Tuning::WIND_GUSTINESS),0.65f),
               "all edited values survived round trip");
         check(reloaded.set(Tuning::SETTLING_TIME,1.25f),
               "settling time can change live");

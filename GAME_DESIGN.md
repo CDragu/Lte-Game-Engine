@@ -241,3 +241,11 @@ The editable config sits beside EBOOT in the homebrew working directory, or may 
 ## 15. Prototype sound feedback (2026-11-17)
 
 The PSP vertical slice provides ten distinct short, **procedurally synthesized** effects: D-pad menu navigation, menu confirmation, back, block release, first falling-block contact, successful stacking, game-over, pause/resume, tuning adjustment and tuning saved. A dedicated `GameSounds` module uses one free channel in LTE's existing PSP callback audio mixer; it stores generated PCM once and replays it without disk assets or synchronous playback on the 60 Hz game thread. A `SoundCues` latch prevents repeated impact sounds from persistent contacts. It remains a prototype sound palette rather than final art; real-device latency, sound quality and multi-voice mixing are pending QA.
+
+## 16. Wind weather system (2026-11-17)
+
+Wind is an active gameplay mechanic with a **deterministic cyclic 2.5D horizontal force** and smaller faster gusts. It uses the same 60 Hz fixed timestep as rigid-body physics. Exposed vertical cuboid faces receive force and a small torque at an elevated point, which affects stacking and balance. The swinging rope block leans into wind, including tangential velocity on release. Static ground receives no wind force. Menu, paused and Game Over states do not advance the weather clock; a new game/retry resets it.
+
+A **bottom-left** wind icon with animated-state direction (`<<` / `>>`), severity and strength percentage tells the player what the tower is experiencing. A 3D arrow to the left of the tower is assembled from three 3D box-shaped arrow pieces, pointing along the force direction. Its colour and length indicate relative strength; calm hides the arrow. Weather severity is based on absolute force, independently of the configured cap. The panel uses colours from blue to red for progressively stronger winds.
+
+Weather settings are added to the existing live-tuning `tuning.cfg`: `wind_strength` (arcade horizontal force, default 1.3), `wind_gustiness` (default 0.4), `wind_cycle` (seconds, default 14). The hold-L tuning UI now paginates its 12 settings. This phase adds **wind only**; rain/clouds and physical weather systems may be future enhancements. The real PSP rendering and physics performance must be checked separately from native tests.

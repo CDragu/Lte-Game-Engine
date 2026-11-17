@@ -37,8 +37,13 @@ World::Contact::Contact() : ia(-1),ib(-1),count(0),normal(),penetration(0.0f)
     bounce[0]=bounce[1]=0.0f;
 }
 
-World::World() : gravity_(12.0f), linearDamping_(0.04f), angularDamping_(0.06f) { reset(); }
-void World::reset() { count_=contacts_=pairs_=manifoldCount_=0; }
+World::World() : gravity_(12.0f), linearDamping_(0.04f), angularDamping_(0.06f), windAccelerationX_(0.0f) { reset(); }
+void World::reset() { count_=contacts_=pairs_=manifoldCount_=0; windAccelerationX_=0.0f; }
+
+void World::setWindAcceleration(float x)
+{
+    if(x>=-6.0f && x<=6.0f) windAccelerationX_=x;
+}
 
 void World::setDynamics(float gravity,float linearDamping,float angularDamping)
 {
@@ -231,6 +236,12 @@ void World::step(float dt)
         Body& b=bodies_[i];
         if(!b.isDynamic()) continue;
         b.velocity.y-=gravity_*dt;
+        // Wind pressure acts on the vertical face above its centre,
+        // transferring both horizontal momentum and a rocking torque.
+        // Larger faces catch more wind; heavier objects resist it.
+        const float force=windAccelerationX_*(b.halfHeight*2.0f);
+        b.velocity.x+=force*b.invMass*dt;
+        b.angularVelocity-=force*(b.halfHeight*0.45f)*b.invInertia*dt;
         b.velocity=b.velocity*linearRetention;
         b.angularVelocity*=angularRetention;
         b.position+=b.velocity*dt;

@@ -18,8 +18,14 @@ void TuningOverlay::draw(engine::video::IVideoDriver* driver,
         engine::core::rect<engine::s32>(40,22,370,41),
         engine::video::SColor(255,255,215,152));
 
-    for(int i=0;i<Tuning::FIELD_COUNT;i++) {
-        const int y=44+i*21;
+    // Eight rows fit at 480x272; automatically page when scrolling past
+    // the last visible entry. New weather fields remain accessible.
+    const int pageSize=8;
+    const int start=(editor.selected()/pageSize)*pageSize;
+    int end=start+pageSize;
+    if(end>Tuning::FIELD_COUNT) end=Tuning::FIELD_COUNT;
+    for(int i=start;i<end;i++) {
+        const int y=44+(i-start)*21;
         const bool selected=i==editor.selected();
         if(selected)
             driver->draw2DRectangle(engine::video::SColor(255,241,180,90),
@@ -45,6 +51,15 @@ void TuningOverlay::draw(engine::video::IVideoDriver* driver,
         font->draw(value.c_str(),
             engine::core::rect<engine::s32>(271,y+3,374,y+20),color);
     }
+    engine::core::stringw page=L"FIELDS ";
+    page+=start+1;
+    page+=L"-";
+    page+=end;
+    page+=L" / ";
+    page+=Tuning::FIELD_COUNT;
+    font->draw(page.c_str(),
+        engine::core::rect<engine::s32>(262,21,382,37),
+        engine::video::SColor(255,216,224,238));
     font->draw(L"UP/DOWN: ITEM   LEFT/RIGHT: VALUE",
         engine::core::rect<engine::s32>(40,236,386,248),
         engine::video::SColor(255,215,230,244));

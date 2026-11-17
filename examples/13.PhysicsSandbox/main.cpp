@@ -13,6 +13,8 @@
 #include "TuningOverlay.h"
 #include "GameSounds.h"
 #include "SoundCues.h"
+#include "Weather.h"
+#include "WeatherView.h"
 #include <pspctrl.h>
 #include "../common.h"
 
@@ -78,17 +80,26 @@ public:
     }
 };
 
-static tower::Vec2 suspendedPosition(float phase,const tower::Tuning& tuning)
+// Wind changes the suspended block's angle and release momentum.
+static float hangingAngle(float phase,const tower::Tuning& tuning,
+                          const tower::Weather& weather)
 {
-    const float a=tuning.get(tower::Tuning::SWING_AMPLITUDE)*sinf(phase);
+    return tuning.get(tower::Tuning::SWING_AMPLITUDE)*sinf(phase)+
+           weather.accelerationX()*0.075f;
+}
+static tower::Vec2 suspendedPosition(float phase,const tower::Tuning& tuning,
+                                     const tower::Weather& weather)
+{
+    const float a=hangingAngle(phase,tuning,weather);
     return PIVOT+tower::Vec2(ROPE_LENGTH*sinf(a),-ROPE_LENGTH*cosf(a));
 }
-
-static tower::Vec2 suspendedVelocity(float phase,const tower::Tuning& tuning)
+static tower::Vec2 suspendedVelocity(float phase,const tower::Tuning& tuning,
+                                     const tower::Weather& weather)
 {
-    const float a=tuning.get(tower::Tuning::SWING_AMPLITUDE)*sinf(phase);
+    const float a=hangingAngle(phase,tuning,weather);
     const float da=tuning.get(tower::Tuning::SWING_AMPLITUDE)*
-                   tuning.get(tower::Tuning::SWING_SPEED)*cosf(phase);
+                   tuning.get(tower::Tuning::SWING_SPEED)*cosf(phase)+
+                   weather.changeRateX()*0.075f;
     return tower::Vec2(ROPE_LENGTH*cosf(a)*da,ROPE_LENGTH*sinf(a)*da);
 }
 
@@ -153,6 +164,8 @@ int engineMain(unsigned int argc,void* argv)
     scene::ICameraSceneNode* camera=smgr->addCameraSceneNode(
         0,core::vector3df(0,3.25f,-18.5f),core::vector3df(0,3.25f,0));
     (void)camera;
+    tower::WeatherView weatherView;
+    weatherView.initialize(smgr);
 
     // The same editable text file is read at startup and saved on L release.
     // Copy tuning.cfg next to EBOOT.PBP in the PSP game directory.
@@ -161,6 +174,11 @@ int engineMain(unsigned int argc,void* argv)
     const bool loadedTuning=tuning.load(tuningFile);
     tower::TuningEditor tuningEditor;
     tower::TuningOverlay tuningOverlay;
+    tower::Weather weather;
+    weather.configure(tuning.get(tower::Tuning::WIND_STRENGTH),
+                      tuning.get(tower::Tuning::WIND_GUSTINESS),
+                      tuning.get(tower::Tuning::WIND_CYCLE));
+    weather.reset();
     bool tuningHeldLastFrame=false;
     const wchar_t* tuningStatus=loadedTuning ? L"TUNING LOADED" : L"TUNING DEFAULTS - FILE MISSING";
     float tuningStatusSeconds=3.0f;
@@ -256,6 +274,11 @@ int engineMain(unsigned int argc,void* argv)
             if(tuningStatusSeconds<0.0f) tuningStatusSeconds=0.0f;
         }
 
+        // Changes via L take effect on the next step; no weather-clock
+        // advance when paused, in Game Over, or at the main menu.
+        weather.configure(tuning.get(tower::Tuning::WIND_STRENGTH),
+                          tuning.get(tower::Tuning::WIND_GUSTINESS),
+                          tuning.get(tower::Tuning::WIND_CYCLE));
         if(flow.screen()==tower::MenuFlow::EXIT_REQUESTED) {
             // Let the selection cue complete before shutting down audio.
             exitDelay-=frameSeconds;
@@ -281,6 +304,7 @@ int engineMain(unsigned int argc,void* argv)
                 // the confirming Cross press so it cannot drop the swinging block.
                 resetWorld(world);
                 tower::applyTuning(world,tuning);
+                weather.reset();
                 stackProgress.reset(world.bodyCount()-1);
                 soundCues.reset();
                 failureRule.reset(world,1);
@@ -316,6 +340,7 @@ int engineMain(unsigned int argc,void* argv)
                 flow.retry();
                 resetWorld(world);
                 tower::applyTuning(world,tuning);
+                weather.reset();
                 stackProgress.reset(world.bodyCount()-1);
                 soundCues.reset();
                 failureRule.reset(world,1);
@@ -328,7 +353,7 @@ int engineMain(unsigned int argc,void* argv)
                     if(nodes[i]) nodes[i]->setVisible(true);
                 if(nodes[4]) nodes[4]->setVisible(false);
                 hanging->setVisible(true);
-                hangingBody.position=suspendedPosition(swingPhase,tuning);
+                hangingBody.position=suspendedPosition(swingPhase,tuning,weather);
                 hangingBody.angle=0.0f;
                 updateNode(hanging,hangingBody);
             }
@@ -350,6 +375,7 @@ int engineMain(unsigned int argc,void* argv)
                     sounds.play(tower::SoundSynth::MENU_SELECT);
                     resetWorld(world);
                     tower::applyTuning(world,tuning);
+                    weather.reset();
                     stackProgress.reset(world.bodyCount()-1);
                     soundCues.reset();
                     failureRule.reset(world,1);
@@ -374,8 +400,8 @@ int engineMain(unsigned int argc,void* argv)
                 if(!paused) {
                     if(input.dropRequested && !dropped) {
                         tower::Body b=tower::Body::box(1.6f,1.0f,1.2f,0.0f,0.0f);
-                        b.position=suspendedPosition(swingPhase,tuning);
-                        b.velocity=suspendedVelocity(swingPhase,tuning);
+                        b.position=suspendedPosition(swingPhase,tuning,weather);
+                        b.velocity=suspendedVelocity(swingPhase,tuning,weather);
                         const int index=world.addBody(b);
                         if(index>=0) {
                             if(!nodes[index])
@@ -392,6 +418,8 @@ int engineMain(unsigned int argc,void* argv)
                     const u32 physicsStart=sceKernelGetSystemTimeLow();
                     while(accumulator>=STEP && stepsThisFrame<4) {
                         tower::applyTuning(world,tuning);
+                        weather.step(STEP);
+                        world.setWindAcceleration(weather.accelerationX());
                         world.step(STEP);
                         swingPhase+=STEP*tuning.get(tower::Tuning::SWING_SPEED);
                         simTime+=STEP;
@@ -430,7 +458,7 @@ int engineMain(unsigned int argc,void* argv)
                 for(int i=0;i<world.bodyCount();i++)
                     updateNode(nodes[i],world.body(i));
                 if(!dropped) {
-                    hangingBody.position=suspendedPosition(swingPhase,tuning);
+                    hangingBody.position=suspendedPosition(swingPhase,tuning,weather);
                     hangingBody.angle=0.0f;
                     updateNode(hanging,hangingBody);
                 }
@@ -439,7 +467,9 @@ int engineMain(unsigned int argc,void* argv)
 
         const bool inMenu=flow.screen()==tower::MenuFlow::MAIN_MENU ||
                           flow.screen()==tower::MenuFlow::EXIT_REQUESTED;
-        tower::Vec2 swing=suspendedPosition(swingPhase,tuning);
+        weatherView.setVisible(!inMenu);
+        weatherView.update(weather);
+        tower::Vec2 swing=suspendedPosition(swingPhase,tuning,weather);
         float menuAngle=0.0f;
         if(inMenu) {
             menuAngle=0.50f*sinf(menuTime*1.7f);
@@ -481,6 +511,7 @@ int engineMain(unsigned int argc,void* argv)
                                video::SColor(255,245,100,102));
         }
         gui->drawAll();
+        if(!inMenu) weatherView.drawHud(driver,font,weather);
 
         if(inMenu) {
             // A readable, controller-operated overlay in the PSP's 480x272 layout.

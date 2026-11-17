@@ -51,6 +51,8 @@ public:
     bool isSupportedBy(int upperBody, int lowerBody) const;
     // Live tuning takes effect on the next fixed physics step.
     void setDynamics(float gravity, float linearDamping, float angularDamping);
+    void setWindAcceleration(float x);
+    float windAcceleration() const { return windAccelerationX_; }
     void step(float dt); // must be called with dt = 1/60 for the prototype
 
 private:
@@ -67,7 +69,7 @@ private:
     Body bodies_[MAX_BODIES];
     Contact manifolds_[MAX_MANIFOLDS];
     int count_, contacts_, pairs_, manifoldCount_;
-    float gravity_, linearDamping_, angularDamping_;
+    float gravity_, linearDamping_, angularDamping_, windAccelerationX_;
     bool collide(int ia, int ib, Contact& contact) const;
     void solve(Contact& contact);
 };
