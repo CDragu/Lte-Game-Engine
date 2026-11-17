@@ -5,7 +5,7 @@
 namespace tower {
 class MenuFlow {
 public:
-    enum Screen { MAIN_MENU, PLAYING, EXIT_REQUESTED };
+    enum Screen { MAIN_MENU, PLAYING, GAME_OVER, EXIT_REQUESTED };
     enum Selection { PLAY, EXIT };
     MenuFlow() : screen_(MAIN_MENU), selection_(PLAY) {}
     Screen screen() const { return screen_; }
@@ -16,8 +16,14 @@ public:
         if (screen_ != MAIN_MENU) return;
         screen_ = (selection_ == PLAY) ? PLAYING : EXIT_REQUESTED;
     }
+    void lose() {
+        if (screen_ == PLAYING) screen_ = GAME_OVER;
+    }
+    void retry() {
+        if (screen_ == GAME_OVER) screen_ = PLAYING;
+    }
     void backToMenu() {
-        if (screen_ == PLAYING) {
+        if (screen_ == PLAYING || screen_ == GAME_OVER) {
             screen_ = MAIN_MENU;
             selection_ = PLAY;
         }

@@ -225,3 +225,9 @@ There is no verified existing automated LTE engine test suite; see [ENGINE_ARCHI
 - Final title, visual theme and whether the first release ships with one mode or multiple.
 
 Decisions above tagged **proposed** remain subject to gameplay tuning. The **60/60 target**, **2.5D simulation**, and **top-three dynamic + spline-driven lower foundation** are the current agreed direction.
+
+## 13. Implemented prototype failure plane (2026-11-17)
+
+In `examples/13.PhysicsSandbox`, the first loss rule uses a **fixed Y plane at the top surface of the lowest seeded tower block** (the current prototype's foundation/spine). Any *upper* dynamic block whose **center** falls below this plane triggers `GAME_OVER`. The lowest foundation block is excluded because it begins below its own top surface. The simulation stops on the failing physics step; Cross or Circle restarts the sandbox and Triangle returns to Play/Exit menu. A red debug line marks the plane. This catches a missed block even if it lands beside the tower on the static ground, where testing for `Y < 0` would fail.
+
+When spline-frozen lower levels are implemented later, this rule can be updated to derive the reference plane from the moving kinematic foundation. The threshold is intentionally fixed for this vertical slice, and game-over conditions beyond this loss rule remain future design work.

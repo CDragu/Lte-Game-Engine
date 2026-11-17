@@ -7,6 +7,7 @@
 #include "HudStats.h"
 #include "HudRenderer.h"
 #include "StackProgress.h"
+#include "TowerFailureRule.h"
 #include "../common.h"
 
 using namespace engine;
@@ -182,6 +183,8 @@ int engineMain(unsigned int argc,void* argv)
     tower::HudRenderer hudRenderer;
     tower::StackProgress stackProgress;
     stackProgress.reset(world.bodyCount()-1);
+    tower::TowerFailureRule failureRule;
+    failureRule.reset(world,1); // top of the lowest seeded 'spine' block
     float simTime=0.0f,accumulator=0.0f,physicsMs=0.0f,menuTime=0.0f;
     float fadeRemaining=0.0f;
     bool dropped=false, paused=false,showDebug=true;
@@ -209,6 +212,7 @@ int engineMain(unsigned int argc,void* argv)
                 // the confirming Cross press so it cannot drop the swinging block.
                 resetWorld(world);
                 stackProgress.reset(world.bodyCount()-1);
+                failureRule.reset(world,1);
                 hudStats.setValue(stackedMetric,stackProgress.stackedCount());
                 dropped=false; paused=false; simTime=0.0f;
                 accumulator=0.0f; physicsMs=0.0f; droppedSteps=0;
@@ -220,6 +224,35 @@ int engineMain(unsigned int argc,void* argv)
                     if(nodes[i]) nodes[i]->setVisible(true);
                 if(nodes[4]) nodes[4]->setVisible(false);
                 hanging->setVisible(true);
+            }
+            input.clearRequests();
+        } else if(flow.screen()==tower::MenuFlow::GAME_OVER) {
+            // Nothing simulates while this screen is active.
+            accumulator=0.0f;
+            if(input.backRequested) {
+                flow.backToMenu();
+                for(int i=0;i<tower::World::MAX_BODIES;i++)
+                    if(nodes[i]) nodes[i]->setVisible(false);
+                hanging->setVisible(false);
+                for(int i=0;i<6;i++)
+                    if(menuNodes[i]) menuNodes[i]->setVisible(true);
+                paused=false; frameSeconds=0.0f; fadeRemaining=0.25f;
+            } else if(input.dropRequested || input.resetRequested) {
+                flow.retry();
+                resetWorld(world);
+                stackProgress.reset(world.bodyCount()-1);
+                failureRule.reset(world,1);
+                hudStats.setValue(stackedMetric,stackProgress.stackedCount());
+                dropped=false; paused=false; simTime=0.0f;
+                physicsMs=0.0f; accumulator=0.0f; droppedSteps=0;
+                frameSeconds=0.0f; fadeRemaining=0.25f;
+                for(int i=0;i<world.bodyCount();i++)
+                    if(nodes[i]) nodes[i]->setVisible(true);
+                if(nodes[4]) nodes[4]->setVisible(false);
+                hanging->setVisible(true);
+                hangingBody.position=suspendedPosition(simTime);
+                hangingBody.angle=0.0f;
+                updateNode(hanging,hangingBody);
             }
             input.clearRequests();
         } else if(flow.screen()==tower::MenuFlow::PLAYING) {
@@ -237,6 +270,7 @@ int engineMain(unsigned int argc,void* argv)
                 if(input.resetRequested) {
                     resetWorld(world);
                     stackProgress.reset(world.bodyCount()-1);
+                    failureRule.reset(world,1);
                     hudStats.setValue(stackedMetric,stackProgress.stackedCount());
                     dropped=false; paused=false;
                     simTime=0.0f; accumulator=0.0f; droppedSteps=0;
@@ -269,11 +303,19 @@ int engineMain(unsigned int argc,void* argv)
                     const u32 physicsStart=sceKernelGetSystemTimeLow();
                     while(accumulator>=STEP && stepsThisFrame<4) {
                         world.step(STEP);
-                        stackProgress.step(world,STEP);
-                        hudStats.setValue(stackedMetric,stackProgress.stackedCount());
                         simTime+=STEP;
                         accumulator-=STEP;
                         ++stepsThisFrame;
+                        // Loss takes priority over successful stacking on the
+                        // same tick. Freeze physics at the exact failing step.
+                        if(failureRule.hasFailed(world)) {
+                            flow.lose();
+                            paused=false;
+                            accumulator=0.0f;
+                            break;
+                        }
+                        stackProgress.step(world,STEP);
+                        hudStats.setValue(stackedMetric,stackProgress.stackedCount());
                     }
                     const u32 physicsEnd=sceKernelGetSystemTimeLow();
                     physicsMs=(physicsEnd-physicsStart)*0.001f;
@@ -323,6 +365,17 @@ int engineMain(unsigned int argc,void* argv)
                     core::vector3df(swing.x,swing.y+0.50f,0.0f),
                     video::SColor(255,242,217,161));
             }
+        }
+        if(!inMenu && showDebug) {
+            // Visualize the fixed tower-failure threshold during development.
+            video::SMaterial thresholdMaterial;
+            thresholdMaterial.Lighting=false;
+            driver->setMaterial(thresholdMaterial);
+            driver->setTransform(video::ETS_WORLD,core::matrix4());
+            const float y=failureRule.planeY();
+            driver->draw3DLine(core::vector3df(-5.0f,y,0.05f),
+                               core::vector3df(5.0f,y,0.05f),
+                               video::SColor(255,245,100,102));
         }
         gui->drawAll();
 
@@ -395,6 +448,25 @@ int engineMain(unsigned int argc,void* argv)
                 font->draw(L"Press O to retry   /   Triangle: menu",
                            core::rect<s32>(130,247,470,266),
                            video::SColor(255,255,250,225));
+        }
+
+        if(flow.screen()==tower::MenuFlow::GAME_OVER) {
+            // The current stacked count stays on screen until a retry.
+            driver->draw2DRectangle(video::SColor(218,9,16,29),
+                                    core::rect<s32>(70,80,412,209));
+            driver->draw2DRectangle(video::SColor(255,242,112,100),
+                                    core::rect<s32>(70,80,412,85));
+            if(font) {
+                font->draw(L"G A M E   O V E R",
+                           core::rect<s32>(150,103,360,124),
+                           video::SColor(255,255,169,144));
+                font->draw(L"A block fell below the foundation.",
+                           core::rect<s32>(116,133,397,156),
+                           video::SColor(255,241,245,250));
+                font->draw(L"X / O: RETRY     TRIANGLE: MENU",
+                           core::rect<s32>(113,175,399,197),
+                           video::SColor(255,255,209,143));
+            }
         }
 
         if(fadeRemaining>0.0f) {
