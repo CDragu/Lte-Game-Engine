@@ -3,6 +3,7 @@
 #include <engine.h>
 #include <math.h>
 #include "Physics2D.h"
+#include "MenuFlow.h"
 #include "../common.h"
 
 using namespace engine;
@@ -18,10 +19,19 @@ const tower::Vec2 PIVOT(0.0f,7.0f);
 class Input : public IEventReceiver {
 public:
     bool dropRequested, resetRequested, pauseRequested, debugRequested;
-    bool crossDown, circleDown, startDown, selectDown;
+    bool upRequested, downRequested, backRequested;
+    bool crossDown, circleDown, startDown, selectDown, upDown, downDown, triangleDown;
     Input() : dropRequested(false), resetRequested(false),
-        pauseRequested(false), debugRequested(false),
-        crossDown(false), circleDown(false), startDown(false), selectDown(false) {}
+        pauseRequested(false), debugRequested(false), upRequested(false),
+        downRequested(false), backRequested(false),
+        crossDown(false), circleDown(false), startDown(false), selectDown(false),
+        upDown(false), downDown(false), triangleDown(false) {}
+
+    void clearRequests() {
+        dropRequested=false; resetRequested=false;
+        pauseRequested=false; debugRequested=false;
+        upRequested=false; downRequested=false; backRequested=false;
+    }
 
     virtual bool OnEvent(SEvent e) {
         if(e.EventType != EET_KEY_INPUT_EVENT) return false;
@@ -39,6 +49,15 @@ public:
         case KEY_SELECT:
             if(down && !selectDown) debugRequested=true;
             selectDown=down; return true;
+        case KEY_UP:
+            if(down && !upDown) upRequested=true;
+            upDown=down; return true;
+        case KEY_DOWN:
+            if(down && !downDown) downRequested=true;
+            downDown=down; return true;
+        case KEY_TRIANGLE:
+            if(down && !triangleDown) backRequested=true;
+            triangleDown=down; return true;
         default: return false;
         }
     }
@@ -132,97 +151,209 @@ int engineMain(unsigned int argc,void* argv)
     scene::ISceneNode* hanging=createBox(smgr,hangingBody,blockColors[3]);
     if(!hanging) { device->drop(); return 1; }
 
-    float simTime=0.0f,accumulator=0.0f,physicsMs=0.0f;
+    // Decorative menu scene: separate nodes, no physics, no external textures.
+    // Same camera as gameplay, but only one set of nodes is visible at a time.
+    scene::ISceneNode* menuNodes[6];
+    for(int i=0;i<6;i++) menuNodes[i]=0;
+    tower::Body menuBase=tower::Body::box(4.6f,0.50f,0.0f,3.25f,-0.40f);
+    menuNodes[0]=createBox(smgr,menuBase,groundColor);
+    for(int i=1;i<=4;i++) {
+        tower::Body b=tower::Body::box(1.45f,0.90f,0.0f,
+            3.25f+((i%2)?-0.14f:0.17f),0.30f+(i-1)*0.90f);
+        b.angle=(i%2 ? -1.0f:1.0f)*0.028f;
+        menuNodes[i]=createBox(smgr,b,blockColors[(i-1)%4]);
+        updateNode(menuNodes[i],b);
+    }
+    tower::Body menuHanging=tower::Body::box(1.45f,0.90f,0.0f,3.25f,5.6f);
+    menuNodes[5]=createBox(smgr,menuHanging,blockColors[3]);
+
+    // The menu is the first visible screen; do not display the paused game
+    // behind it. Retain all nodes to avoid repeated PSP allocations.
+    for(int i=0;i<tower::World::MAX_BODIES;i++)
+        if(nodes[i]) nodes[i]->setVisible(false);
+    hanging->setVisible(false);
+
+    tower::MenuFlow flow;
+    float simTime=0.0f,accumulator=0.0f,physicsMs=0.0f,menuTime=0.0f;
+    float fadeRemaining=0.0f;
     bool dropped=false, paused=false,showDebug=true;
     int droppedSteps=0,stepsThisFrame=0;
     u32 previous=device->getTimer()->getRealTime();
 
     while(device->run()) {
-        // Engine device::run() pumps the PSP controls into the event receiver.
+        // Pump PSP button events first, then process them for exactly one screen.
         const u32 now=device->getTimer()->getRealTime();
         float frameSeconds=(now-previous)*0.001f;
         previous=now;
         if(frameSeconds>0.08f) frameSeconds=0.08f; // suspend/frame stall guard
 
-        if(input.resetRequested) {
-            input.resetRequested=false;
-            resetWorld(world);
-            dropped=false; paused=false;
-            simTime=0.0f; accumulator=0.0f; droppedSteps=0;
-            if(nodes[4]) nodes[4]->setVisible(false);
-            hanging->setVisible(true);
-        }
-        if(input.pauseRequested) {
-            input.pauseRequested=false;
-            paused=!paused;
-            accumulator=0.0f;
-        }
-        if(input.debugRequested) {
-            input.debugRequested=false;
-            showDebug=!showDebug;
-        }
-
-        stepsThisFrame=0;
-        if(!paused) {
-            // Handle edge-triggered drop using the current analytical pendulum state.
-            if(input.dropRequested && !dropped) {
-                tower::Body b=tower::Body::box(1.6f,1.0f,1.2f,0.0f,0.0f);
-                b.position=suspendedPosition(simTime);
-                b.velocity=suspendedVelocity(simTime); // tangent retained on release
-                const int index=world.addBody(b);
-                if(index>=0) {
-                    if(!nodes[index])
-                        nodes[index]=createBox(smgr,b,blockColors[3]);
-                    nodes[index]->setVisible(true);
-                    dropped=true;
-                    hanging->setVisible(false);
+        if(flow.screen()==tower::MenuFlow::MAIN_MENU) {
+            menuTime+=frameSeconds; // simple visual animation, no physics tick
+            if(input.upRequested) flow.up();
+            if(input.downRequested) flow.down();
+            if(input.dropRequested) {
+                flow.activate();
+                if(flow.screen()==tower::MenuFlow::EXIT_REQUESTED) {
+                    device->closeDevice(); // exit the app instead of switching scenes
+                    break;
+                }
+                // Entering Play always starts a fresh sandbox. Crucially, consume
+                // the confirming Cross press so it cannot drop the swinging block.
+                resetWorld(world);
+                dropped=false; paused=false; simTime=0.0f;
+                accumulator=0.0f; physicsMs=0.0f; droppedSteps=0;
+                frameSeconds=0.0f;
+                fadeRemaining=0.25f;
+                for(int i=0;i<6;i++)
+                    if(menuNodes[i]) menuNodes[i]->setVisible(false);
+                for(int i=0;i<world.bodyCount();i++)
+                    if(nodes[i]) nodes[i]->setVisible(true);
+                if(nodes[4]) nodes[4]->setVisible(false);
+                hanging->setVisible(true);
+            }
+            input.clearRequests();
+        } else if(flow.screen()==tower::MenuFlow::PLAYING) {
+            if(input.backRequested) {
+                flow.backToMenu();
+                for(int i=0;i<tower::World::MAX_BODIES;i++)
+                    if(nodes[i]) nodes[i]->setVisible(false);
+                hanging->setVisible(false);
+                for(int i=0;i<6;i++)
+                    if(menuNodes[i]) menuNodes[i]->setVisible(true);
+                paused=false; accumulator=0.0f; frameSeconds=0.0f;
+                fadeRemaining=0.25f;
+                input.clearRequests();
+            } else {
+                if(input.resetRequested) {
+                    resetWorld(world);
+                    dropped=false; paused=false;
+                    simTime=0.0f; accumulator=0.0f; droppedSteps=0;
+                    physicsMs=0.0f; frameSeconds=0.0f;
+                    if(nodes[4]) nodes[4]->setVisible(false);
+                    hanging->setVisible(true);
+                }
+                if(input.pauseRequested) {
+                    paused=!paused;
+                    accumulator=0.0f;
+                }
+                if(input.debugRequested) showDebug=!showDebug;
+                stepsThisFrame=0;
+                if(!paused) {
+                    if(input.dropRequested && !dropped) {
+                        tower::Body b=tower::Body::box(1.6f,1.0f,1.2f,0.0f,0.0f);
+                        b.position=suspendedPosition(simTime);
+                        b.velocity=suspendedVelocity(simTime);
+                        const int index=world.addBody(b);
+                        if(index>=0) {
+                            if(!nodes[index])
+                                nodes[index]=createBox(smgr,b,blockColors[3]);
+                            if(nodes[index]) nodes[index]->setVisible(true);
+                            dropped=true;
+                            hanging->setVisible(false);
+                        }
+                    }
+                    accumulator+=frameSeconds;
+                    const u32 physicsStart=sceKernelGetSystemTimeLow();
+                    while(accumulator>=STEP && stepsThisFrame<4) {
+                        world.step(STEP);
+                        simTime+=STEP;
+                        accumulator-=STEP;
+                        ++stepsThisFrame;
+                    }
+                    const u32 physicsEnd=sceKernelGetSystemTimeLow();
+                    physicsMs=(physicsEnd-physicsStart)*0.001f;
+                    if(accumulator>=STEP) {
+                        accumulator=0.0f;
+                        ++droppedSteps;
+                    }
+                }
+                input.clearRequests();
+                for(int i=0;i<world.bodyCount();i++)
+                    updateNode(nodes[i],world.body(i));
+                if(!dropped) {
+                    hangingBody.position=suspendedPosition(simTime);
+                    hangingBody.angle=0.0f;
+                    updateNode(hanging,hangingBody);
                 }
             }
-            input.dropRequested=false;
-            accumulator+=frameSeconds;
-            const u32 physicsStart=sceKernelGetSystemTimeLow();
-            while(accumulator>=STEP && stepsThisFrame<4) {
-                world.step(STEP);
-                simTime+=STEP;
-                accumulator-=STEP;
-                stepsThisFrame++;
-            }
-            const u32 physicsEnd=sceKernelGetSystemTimeLow();
-            physicsMs=(physicsEnd-physicsStart)*0.001f;
-            if(accumulator>=STEP) {
-                // Don't attempt unbounded catch-up after an overloaded frame.
-                accumulator=0.0f;
-                droppedSteps++;
-            }
-        } else {
-            input.dropRequested=false;
         }
 
-        for(int i=0;i<world.bodyCount();i++) updateNode(nodes[i],world.body(i));
+        const bool inMenu=flow.screen()==tower::MenuFlow::MAIN_MENU;
         tower::Vec2 swing=suspendedPosition(simTime);
-        if(!dropped) {
-            hangingBody.position=swing;
-            hangingBody.angle=0.0f;
-            updateNode(hanging,hangingBody);
+        float menuAngle=0.0f;
+        if(inMenu) {
+            menuAngle=0.50f*sinf(menuTime*1.7f);
+            menuHanging.position=tower::Vec2(
+                3.25f+1.40f*sinf(menuAngle),7.35f-1.40f*cosf(menuAngle));
+            menuHanging.angle=0.0f;
+            updateNode(menuNodes[5],menuHanging);
         }
 
-        driver->beginScene(true,true,video::SColor(255,39,50,77));
+        driver->beginScene(true,true,
+            inMenu ? video::SColor(255,23,36,56) : video::SColor(255,39,50,77));
         smgr->drawAll();
-        if(!dropped) {
+
+        if(inMenu || !dropped) {
             video::SMaterial lineMaterial;
             lineMaterial.Lighting=false;
             driver->setMaterial(lineMaterial);
             driver->setTransform(video::ETS_WORLD,core::matrix4());
-            driver->draw3DLine(core::vector3df(PIVOT.x,PIVOT.y,0.0f),
-                               core::vector3df(swing.x,swing.y+0.50f,0.0f),
-                               video::SColor(255,242,217,161));
+            if(inMenu) {
+                driver->draw3DLine(core::vector3df(3.25f,7.35f,0.0f),
+                    core::vector3df(menuHanging.position.x,
+                                   menuHanging.position.y+menuHanging.halfHeight,0.0f),
+                    video::SColor(255,255,210,140));
+            } else {
+                driver->draw3DLine(core::vector3df(PIVOT.x,PIVOT.y,0.0f),
+                    core::vector3df(swing.x,swing.y+0.50f,0.0f),
+                    video::SColor(255,242,217,161));
+            }
         }
         gui->drawAll();
-        if(font) {
+
+        if(inMenu) {
+            // A readable, controller-operated overlay in the PSP's 480x272 layout.
+            // The moving 3D block tower stays visible to the right.
+            driver->draw2DRectangle(video::SColor(215,10,22,39),
+                                    core::rect<s32>(17,30,255,248));
+            driver->draw2DRectangle(video::SColor(255,224,167,70),
+                                    core::rect<s32>(17,30,255,34));
+            if(font) {
+                font->draw(L"T O W E R   P H Y S I C S",
+                    core::rect<s32>(27,52,253,73),
+                    video::SColor(255,255,221,151));
+                font->draw(L"Drop. Balance. Build higher.",
+                    core::rect<s32>(27,82,251,98),
+                    video::SColor(255,203,222,234));
+            }
+            const bool playSelected=flow.selection()==tower::MenuFlow::PLAY;
+            driver->draw2DRectangle(
+                playSelected ? video::SColor(255,244,182,86)
+                             : video::SColor(170,60,75,97),
+                core::rect<s32>(29,123,236,157));
+            driver->draw2DRectangle(
+                !playSelected ? video::SColor(255,244,182,86)
+                              : video::SColor(170,60,75,97),
+                core::rect<s32>(29,168,236,202));
+            if(font) {
+                font->draw(playSelected ? L">  PLAY" : L"   PLAY",
+                    core::rect<s32>(42,133,224,155),
+                    playSelected ? video::SColor(255,23,35,52)
+                                 : video::SColor(255,255,255,255));
+                font->draw(!playSelected ? L">  EXIT" : L"   EXIT",
+                    core::rect<s32>(42,178,224,198),
+                    !playSelected ? video::SColor(255,23,35,52)
+                                  : video::SColor(255,255,255,255));
+                font->draw(L"UP/DOWN: CHOOSE   X: SELECT",
+                    core::rect<s32>(27,219,254,239),
+                    video::SColor(255,209,222,237));
+            }
+        } else if(font) {
             driver->draw2DRectangle(video::SColor(175,15,22,35),
                                     core::rect<s32>(0,0,480,28));
-            font->draw(L"X: DROP    O: RESET    START: PAUSE    SELECT: HUD",
-                       core::rect<s32>(8,7,476,26),video::SColor(255,255,255,255));
+            font->draw(L"X: DROP  O: RESET  START: PAUSE  TRIANGLE: MENU",
+                       core::rect<s32>(7,7,478,26),
+                       video::SColor(255,255,255,255));
             if(showDebug) {
                 core::stringw status=L"FPS: ";
                 status+=driver->getFPS();
@@ -245,8 +376,19 @@ int engineMain(unsigned int argc,void* argv)
                 font->draw(L"PAUSED",core::rect<s32>(210,118,295,142),
                            video::SColor(255,255,232,175));
             else if(dropped)
-                font->draw(L"Press O to retry the drop",
-                           core::rect<s32>(158,247,440,266),video::SColor(255,255,250,225));
+                font->draw(L"Press O to retry   /   Triangle: menu",
+                           core::rect<s32>(130,247,470,266),
+                           video::SColor(255,255,250,225));
+        }
+
+        if(fadeRemaining>0.0f) {
+            // Fade in the target screen after changing visible scene nodes.
+            const float fade=fadeRemaining/0.25f;
+            driver->draw2DRectangle(
+                video::SColor((int)(210.0f*fade),5,12,23),
+                core::rect<s32>(0,0,480,272));
+            fadeRemaining-=frameSeconds;
+            if(fadeRemaining<0.0f) fadeRemaining=0.0f;
         }
         driver->endScene();
     }
