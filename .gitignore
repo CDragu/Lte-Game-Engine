@@ -19,6 +19,10 @@ EBOOT.PBP
 # Logs and local debug output
 *.log
 
+# Native game test executables and fixtures
+/game/tests/*_tests
+/game/tests/tuning_test_output.cfg
+
 # Tooling / editor leftovers
 *~
 *.swp

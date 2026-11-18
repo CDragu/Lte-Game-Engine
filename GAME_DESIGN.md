@@ -3,7 +3,7 @@
 **Status:** Draft v0.2, pending gameplay testing  
 **Date:** 2026-11-17  
 **Target:** Sony PSP, LTE Game Engine 2.2, C++  
-**Companion:** [ENGINE_ARCHITECTURE.md](ENGINE_ARCHITECTURE.md)
+**Implementation:** [`game/README.md`](game/README.md)
 
 ## 1. Pitch
 
@@ -202,7 +202,7 @@ Define transitions with explicit conditions so that a bouncing block cannot scor
 - Camera preserves visibility of tower top and falling block.
 - 60 FPS / 60 Hz tracked; record real hardware results.
 
-There is no verified existing automated LTE engine test suite; see [ENGINE_ARCHITECTURE.md](ENGINE_ARCHITECTURE.md).
+The game has a native automated suite under `game/tests`; the legacy LTE engine itself still has no dedicated regression suite.
 
 ## 11. Implementation milestones
 
@@ -228,7 +228,7 @@ Decisions above tagged **proposed** remain subject to gameplay tuning. The **60/
 
 ## 13. Implemented prototype failure plane (2026-11-17)
 
-In `examples/13.PhysicsSandbox`, the first loss rule uses a **fixed Y plane at the top surface of the lowest seeded tower block** (the current prototype's foundation/spine). Any *upper* dynamic block whose **center** falls below this plane triggers `GAME_OVER`. The lowest foundation block is excluded because it begins below its own top surface. The simulation stops on the failing physics step; Cross or Circle restarts the sandbox and Triangle returns to Play/Exit menu. A red debug line marks the plane. This catches a missed block even if it lands beside the tower on the static ground, where testing for `Y < 0` would fail.
+In `game`, the first loss rule uses a **fixed Y plane at the top surface of the lowest seeded tower block** (the current prototype's foundation/spine). Any *upper* dynamic block whose **center** falls below this plane triggers `GAME_OVER`. The lowest foundation block is excluded because it begins below its own top surface. The simulation stops on the failing physics step; Cross or Circle restarts the sandbox and Triangle returns to Play/Exit menu. A red debug line marks the plane. This catches a missed block even if it lands beside the tower on the static ground, where testing for `Y < 0` would fail.
 
 When spline-frozen lower levels are implemented later, this rule can be updated to derive the reference plane from the moving kinematic foundation. The threshold is intentionally fixed for this vertical slice, and game-over conditions beyond this loss rule remain future design work.
 
@@ -236,7 +236,7 @@ When spline-frozen lower levels are implemented later, this rule can be updated 
 
 The PSP vertical slice now reads an editable `tuning.cfg` at startup. During gameplay or Game Over, **hold L**, use D-pad up/down to select a value and left/right to adjust it; release L to save back to **the same file path**. Gravity, friction, restitution, linear/angular damping, swinging pendulum amplitude/speed, required settling seconds, and points awarded for a successfully settled block are supported. The game retains a modular HUD `SCORE` tile alongside `BOXES STACKED`. New successful placements award the current `score_per_block`, while the three seed blocks do not award points. Live tuning does not stop an unpaused simulation, and a game-over screen remains static. Settings persist across retries, and when saved, across reboots.
 
-The editable config sits beside EBOOT in the homebrew working directory, or may be adapted to an explicit Memory Stick path. For shipping, distribute the tuned config with the game or compile defaults generated from it. See `examples/13.PhysicsSandbox/README.md` for placement, controls and failure reporting. PSP read/write permissions and EBOOT rendering still require on-device verification.
+The editable config sits beside EBOOT in the homebrew working directory, or may be adapted to an explicit Memory Stick path. For shipping, distribute the tuned config with the game or compile defaults generated from it. See `game/README.md` for placement, controls and failure reporting. PSP read/write permissions and EBOOT rendering still require on-device verification.
 
 ## 15. Prototype sound feedback (2026-11-17)
 
